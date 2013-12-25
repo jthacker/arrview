@@ -2,8 +2,10 @@ from PySide.QtCore import *
 from PySide.QtGui import *
 
 import numpy as np
+
 from traitsui.qt4.editor import Editor
 from traitsui.qt4.basic_editor_factory import BasicEditorFactory
+from traits.api import Instance, HasTraits, Tuple
 
 from .. import colormapper as cm
 
@@ -62,7 +64,7 @@ class ArrayGraphicsView(QGraphicsView):
             self.scale(s,s)
             self.currentScale *= s 
 
-    def setArray(self, array):
+    def setPixmap(self, pixmap):
         '''Set the array to be viewed.
         Args:
         array (numpy array): the array to be viewed
@@ -70,15 +72,7 @@ class ArrayGraphicsView(QGraphicsView):
         This will remove the previous array but maintain the previous scaling 
         as well as the panned position.
         '''
-        def cm_ident(a):
-            return np.dstack((a,a,a))
-
-        def norm(a):
-            min = a.min()
-            max = a.max()
-            return (a - min) / (max - min)
-
-        self.pixmap = cm.ndarray_to_arraypixmap(array, cmap=cm_ident, norm=norm)
+        self.pixmap = pixmap
         #self.scene.removeItem(self.pixmapItem)
         #self.pixmapItem = QGraphicsPixmapItem(self.pixmap)
         #self.scene.addItem(self.pixmapItem)
@@ -90,21 +84,34 @@ class ArrayGraphicsView(QGraphicsView):
         r = QRectF(r.left()-pad,r.top()-pad,r.width()+2*pad,r.height()+2*pad)
         self.scene.setSceneRect(r)
 
-    def fitArray(self):
+    def fitView(self):
         self.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
 
 
+class MouseInput(HasTraits):
+    pos = Tuple()
+
+
 class _SlicerEditor(Editor):
+    mouse = Instance(MouseInput)
+
     def init(self, parent):
         self._scene = QGraphicsScene()
+        self.mouse = self.factory.mouse
         self.control = ArrayGraphicsView(self._scene)
-        self.control.setArray(self.value)
-        self.control.fitArray()
+        self.control.setPixmap(self.value)
+        self.control.fitView()
+        self.control.mousemoved.connect(self._mouse_moved)
 
     def update_editor(self):
-        print('update_editor')
+        self.control.setPixmap(self.value)
+
+    def _mouse_moved(self, x, y):
+        self.mouse.pos = (x,y)
 
 
 class SlicerEditor(BasicEditorFactory):
     klass = _SlicerEditor
+
+    mouse = Instance(MouseInput)
 

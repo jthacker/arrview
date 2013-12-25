@@ -24,6 +24,7 @@ class Slicer(HasTraits):
     dims = Instance(ArrayDims)
     slc  = Instance(SliceTuple)
     view = Property(depends_on='[dims,slc]')
+    ndim = Property()
 
     def __init__(self, arr, xdim=1, ydim=0):
         '''Wraps a numpy array to keep track of a 2D slice.
@@ -36,6 +37,9 @@ class Slicer(HasTraits):
         self.slc = SliceTuple([0]*arr.ndim)
         self.dims = ArrayDims(xdim, ydim, self._get_freedims(xdim,ydim))
         self.set_viewdims(xdim,ydim)
+    
+    def _get_ndim(self):
+        return self._arr.ndim
 
     def _get_freedims(self, xdim, ydim):
         return set(range(self._arr.ndim)) - set((xdim,ydim))
