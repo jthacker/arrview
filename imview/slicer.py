@@ -2,7 +2,7 @@ from collections import namedtuple
 import numpy as np
 from traits.api import (HasTraits,
         Instance, Int, List, Property, cached_property)
-from .tools import unique
+from .util import unique
 
 ArrayDims = namedtuple('ArrayDims', ('x','y','free'))
 

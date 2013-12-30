@@ -7,7 +7,7 @@ from traitsui.qt4.basic_editor_factory import BasicEditorFactory
 from itertools import chain, cycle, izip
 from functools import partial
 
-from ..tools import weave
+from ..util import weave
 
 class DraggableLabel(QLabel):
     dragStart = Signal(object)

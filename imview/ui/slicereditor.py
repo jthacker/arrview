@@ -5,7 +5,7 @@ import numpy as np
 
 from traitsui.qt4.editor import Editor
 from traitsui.qt4.basic_editor_factory import BasicEditorFactory
-from traits.api import Instance, HasTraits, Tuple
+from traits.api import Instance, HasTraits, Tuple, Int, Event
 
 from .. import colormapper as cm
 
@@ -21,22 +21,19 @@ class ArrayGraphicsView(QGraphicsView):
     * Maximum zoom should be based on pixel size
     '''
     mousemoved = Signal(float, float)
+    mousewheeled = Signal(float, float, int)
     mousepressed = Signal(float, float)
     mousereleased = Signal(float, float)
     
-    def __init__(self, scene):
-        super(ArrayGraphicsView,self).__init__(scene)
+    def __init__(self):
+        super(ArrayGraphicsView, self).__init__()
         self.setViewportUpdateMode(self.FullViewportUpdate)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.pixmapItem = QGraphicsPixmapItem()
-        self.setDragMode(QGraphicsView.ScrollHandDrag)
- 
-        self.scene = scene
-        self.scene.addItem(self.pixmapItem)
+        self.setScene(QGraphicsScene())
+        self.scene().addItem(self.pixmapItem)
         self.setBackgroundBrush(QBrush(Qt.black))
-        self.currentScale = 1
 
     def _to_item_coords(self, ev):
         sp = self.mapToScene(ev.pos())
@@ -52,18 +49,14 @@ class ArrayGraphicsView(QGraphicsView):
         self.mousepressed.emit(*self._to_item_coords(ev))
 
     def mouseMoveEvent(self, ev):
-        super(ArrayGraphicsView,self).mouseMoveEvent(ev)
+        super(ArrayGraphicsView, self).mouseMoveEvent(ev)
         self.mousemoved.emit(*self._to_item_coords(ev))
 
     def wheelEvent(self, ev):
-        zoomIn = ev.delta() < 0
-        s = 1.2 if zoomIn else 1/1.2
-        lessThanMax = zoomIn and self.currentScale < 20
-        greaterThanMin = not zoomIn and self.currentScale > 0.1
-        if lessThanMax or greaterThanMin:
-            self.scale(s,s)
-            self.currentScale *= s 
-
+        super(ArrayGraphicsView, self).wheelEvent(ev)
+        x,y = self._to_item_coords(ev)
+        self.mousewheeled.emit(x,y,ev.delta())
+        
     def setPixmap(self, pixmap):
         '''Set the array to be viewed.
         Args:
@@ -73,45 +66,53 @@ class ArrayGraphicsView(QGraphicsView):
         as well as the panned position.
         '''
         self.pixmap = pixmap
-        #self.scene.removeItem(self.pixmapItem)
-        #self.pixmapItem = QGraphicsPixmapItem(self.pixmap)
-        #self.scene.addItem(self.pixmapItem)
         self.pixmapItem.setPixmap(self.pixmap)
 
         # Constrain scene to be the boundary of the pixmap
         pad = 5
         r = self.pixmapItem.boundingRect()
         r = QRectF(r.left()-pad,r.top()-pad,r.width()+2*pad,r.height()+2*pad)
-        self.scene.setSceneRect(r)
+        self.setSceneRect(r)
 
     def fitView(self):
-        self.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+        self.fitInView(self.sceneRect(), Qt.KeepAspectRatio)
 
 
 class MouseInput(HasTraits):
     pos = Tuple()
+    delta = Int()
+
+    wheeled = Event
+    moved = Event
+    pressed = Event
 
 
 class _SlicerEditor(Editor):
     mouse = Instance(MouseInput)
-
+    
     def init(self, parent):
-        self._scene = QGraphicsScene()
         self.mouse = self.factory.mouse
-        self.control = ArrayGraphicsView(self._scene)
+        self.control = self.factory.view
         self.control.setPixmap(self.value)
         self.control.fitView()
         self.control.mousemoved.connect(self._mouse_moved)
+        self.control.mousewheeled.connect(self._mouse_wheel_moved)
 
     def update_editor(self):
         self.control.setPixmap(self.value)
 
     def _mouse_moved(self, x, y):
         self.mouse.pos = (x,y)
+        self.mouse.moved = True
+
+    def _mouse_wheel_moved(self, x, y, delta):
+        self.mouse.pos = (x,y)
+        self.mouse.delta = delta
+        self.mouse.wheeled = True
 
 
 class SlicerEditor(BasicEditorFactory):
     klass = _SlicerEditor
 
     mouse = Instance(MouseInput)
-
+    view = Instance(ArrayGraphicsView)
