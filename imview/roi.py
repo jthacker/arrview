@@ -25,6 +25,7 @@ class ROI(HasTraits):
         self.polys.append(SlicePoly(dims,poly))
 
     def _dims_to_slice(self, dims, rr, cc):
+        dims = list(dims)
         rrIdx = dims.index(slice(None))
         ccIdx = dims.index(slice(None), rrIdx+1)
         assert 0 <= rrIdx < len(dims)
