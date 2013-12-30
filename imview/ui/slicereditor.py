@@ -53,7 +53,6 @@ class ArrayGraphicsView(QGraphicsView):
         self.mousemoved.emit(*self._to_item_coords(ev))
 
     def wheelEvent(self, ev):
-        super(ArrayGraphicsView, self).wheelEvent(ev)
         x,y = self._to_item_coords(ev)
         self.mousewheeled.emit(x,y,ev.delta())
         
@@ -83,8 +82,11 @@ class MouseInput(HasTraits):
     delta = Int()
 
     wheeled = Event
-    moved = Event
     pressed = Event
+    moved = Event
+
+    def __repr__(self):
+        return "MouseInput(pos=%s,delta=%s)" % (self.pos, self.delta)
 
 
 class _SlicerEditor(Editor):
@@ -94,9 +96,10 @@ class _SlicerEditor(Editor):
         self.mouse = self.factory.mouse
         self.control = self.factory.view
         self.control.setPixmap(self.value)
-        self.control.fitView()
         self.control.mousemoved.connect(self._mouse_moved)
+        self.control.mousepressed.connect(self._mouse_pressed)
         self.control.mousewheeled.connect(self._mouse_wheel_moved)
+        self.control.fitView()
 
     def update_editor(self):
         self.control.setPixmap(self.value)
@@ -104,6 +107,10 @@ class _SlicerEditor(Editor):
     def _mouse_moved(self, x, y):
         self.mouse.pos = (x,y)
         self.mouse.moved = True
+
+    def _mouse_pressed(self, x, y):
+        self.mouse.pos = (x,y)
+        self.mouse.pressed = True
 
     def _mouse_wheel_moved(self, x, y, delta):
         self.mouse.pos = (x,y)

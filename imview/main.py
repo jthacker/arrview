@@ -9,6 +9,7 @@ from .slicer import Slicer
 from .colormapper import ColorMapper, ndarray_to_arraypixmap, ArrayPixmap
 from .tool import tools
 from .util import weave
+from .roi import ROIManager
 from .ui.slicereditor import SlicerEditor, MouseInput, ArrayGraphicsView
 from .ui.listeditor import DimEditor
 
@@ -20,16 +21,17 @@ class ImageView(HasTraits):
     zDimVal = Int
     zDimHigh = Int
     mouse = Instance(MouseInput, MouseInput())
-    graphicsView = Instance(ArrayGraphicsView, ArrayGraphicsView())
+    graphics = Instance(ArrayGraphicsView, ArrayGraphicsView())
     tool = Any(tools[0])
     msg = Str()
+    roiManager = Instance(ROIManager, ROIManager())
 
     view = View(
             Group(
                 HGroup(
                     Item(name='pixmap', 
                         editor=SlicerEditor(mouse=mouse.default_value, 
-                            view=graphicsView.default_value),
+                            view=graphics.default_value),
                         show_label=False),
                     VGroup(
                         Item(name='cmap', 
@@ -47,7 +49,10 @@ class ImageView(HasTraits):
                             style='readonly',
                             show_label=False),
                         Item(name='tool',
-                            editor=EnumEditor(values={t:t.name for t in tools}))))),
+                            editor=EnumEditor(values={t:t.name for t in tools})),
+                        Item(name='roiManager',
+                            style='custom',
+                            show_label=False)))),
                         resizable=True)
 
     def __init__(self, arr):
@@ -56,9 +61,10 @@ class ImageView(HasTraits):
         self.viewdims = self._init_viewdims()
         self.update_pixmap()
         self.mouse.on_trait_event(self.mouse_moved, 'moved')
+        self.mouse.on_trait_event(self.mouse_pressed, 'pressed')
         self.mouse.on_trait_event(self.mouse_wheeled, 'wheeled')
-        self.tool_instance = self.tool()
-        self.tool_instance.init(self.graphicsView)
+        self.tool_instance = self.tool(self)
+        self.tool_instance.init()
 
     def _init_viewdims(self):
         dims = self.slicer.dims
@@ -75,8 +81,8 @@ class ImageView(HasTraits):
     @on_trait_change('tool')
     def tool_changed(self, trait, name, prev, curr):
         self.tool_instance.destroy()
-        self.tool_instance = curr()
-        self.tool_instance.init(self.graphicsView)
+        self.tool_instance = curr(self)
+        self.tool_instance.init()
 
     @on_trait_change('viewdims')
     def update_view(self):
@@ -92,7 +98,6 @@ class ImageView(HasTraits):
         zdim = self.viewdims_to_map()['z']
         self.slicer.set_freedim(zdim, self.zDimVal)
 
-    
     def display_array_value(self):
         x,y = self.mouse.pos
         slc = list(self.slicer.slc)
@@ -109,6 +114,9 @@ class ImageView(HasTraits):
         else:
             msg += "  "
         self.msg = msg
+
+    def mouse_pressed(self):
+        self.tool_instance.mouse_pressed(self.mouse)
 
     def mouse_moved(self):
         self.display_array_value()
@@ -128,13 +136,7 @@ def changed(a,b,c,d):
 
 
 def init():
-    x = np.linspace(-1,1,256)
-    y = np.linspace(-1,1,128)
-    t = np.linspace(0,1,32)
-    v = np.linspace(-np.pi,np.pi,64)
-    [XX,YY,TT,VV] = np.meshgrid(x,y,t,v)
-    arr = np.sqrt(XX**2 + YY**2) * np.exp(-2*TT) * np.cos(VV)
-    arr[arr > 0.8] = 0
+    arr = np.random.random((64,128,32,10))
     return ImageView(arr)
 
 if __name__ == '__main__':
