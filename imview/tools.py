@@ -64,12 +64,7 @@ class DrawROITool(ImageTool):
     def init(self):
         self._initialPoint = None
         self._points = []
-        self._poly = QPolygonF()
-        self._polyItem = self.view.graphics.scene().addPolygon(self._poly,
-                settings.default_roi_pen(), settings.default_roi_brush())
-
-    def destroy(self):
-        self.view.graphics.scene().removeItem(self._polyItem)
+        self._activePoints = []
 
     def mouse_pressed(self, mouse):
         x,y = mouse.pos
@@ -81,9 +76,8 @@ class DrawROITool(ImageTool):
             self._initialPoint = None
             closedPts = _close_polygon(self._points[-1], self._points[0])
             self._points.extend(closedPts)
-            self._polyItem.setPolygon(QPolygonF(self._points))
             roi = ROI(name='new roi')
-            roi.add_poly(self.view.viewdims, np.array([(p.x(),p.y()) for p in self._points]))
+            roi.add_poly(self.view.slicer.slc, np.array([(p.y(),p.x()) for p in self._points]))
             self.view.roiManager.add(roi)
 
     def mouse_moved(self, mouse):
@@ -96,8 +90,7 @@ class DrawROITool(ImageTool):
                 v.setY(0)
             else:
                 v.setX(0)
-            pts = self._points + [self._initialPoint + v]
-            self._polyItem.setPolygon(QPolygonF(pts))
+            self._activePoints = self._points + [self._initialPoint + v]
 
             if vx >= 0.8 or vy >= 0.8:
                 p1 = self._initialPoint + v
@@ -105,6 +98,18 @@ class DrawROITool(ImageTool):
                 self._points.append(p1)
                 self._initialPoint = p1
 
+    def active_points(self):
+        return self._activePoints
+
+
+class ROISelectTool(ImageTool):
+    name = 'ROI Select'
+
+    def init(self):
+        pass
+
+    def mouse_pressed(self, mouse):
+        pass
 
 
 class PanAndZoomTool(ImageTool):
@@ -127,4 +132,4 @@ class PanAndZoomTool(ImageTool):
             self.view.graphics.scale(s,s)
             self.currentScale *= s 
 
-tools = [PanAndZoomTool, DrawROITool]
+tools = [PanAndZoomTool, DrawROITool, ROISelectTool]
