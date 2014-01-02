@@ -83,11 +83,12 @@ class ListOrderWidget(QWidget):
         for l in weave(lambda: QLabel(','), self.labels):
             layout.addWidget(l)
         layout.addWidget(QLabel(']'))
-        
-        minSize = max([l.minimumSizeHint() for l in self.labels], 
-                key=lambda x:x.width())
-        for l in self.labels:
-            l.setMinimumSize(minSize)
+       
+        sizes = [l.minimumSizeHint() for l in self.labels]
+        if len(sizes) > 0:
+            minSize = max(sizes, key=lambda x:x.width())
+            for l in self.labels:
+                l.setMinimumSize(minSize)
 
     def getState(self):
         return [d.obj for d in self.labels]
@@ -138,28 +139,6 @@ class ListOrderEditor(BasicEditorFactory):
     klass = _ListOrderEditor
 
 
-class _DimEditor(_ListOrderEditor):
-    def init(self, parent):
-        def disp(name):
-            colorMap = { 
-                'x': 'red',
-                'y': 'blue',
-                'z': 'green' }
-            if name in colorMap:
-                color = colorMap[name]
-                return "<font color='%s'>%s</font>" % (color,name)
-            else:
-                return name
-
-        self.control = ListOrderWidget(self.value, disp)
-        self.control.orderChanged.connect(self._changed)
-
-
-class DimEditor(BasicEditorFactory):
-    klass = _DimEditor
-
-
-
 ## Quick Test ##
 def main():
     from traits.api import HasTraits, List
@@ -169,8 +148,7 @@ def main():
         lst = List(range(10))
         dims = List(['x','y','z',None,None])
         view = View(
-                Item('lst', editor=ListOrderEditor()),
-                Item('dims', editor=DimEditor()))
+                Item('lst', editor=ListOrderEditor()))
 
     obj = Obj()
     def debug(a,b,c,d): print(a,b,c,d)
