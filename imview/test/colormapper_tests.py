@@ -11,7 +11,7 @@ class TestColorMapper(object):
         # Replicates array for each color channel
         def cm_ident(a):
             return np.dstack((a,a,a))
-
+             
         arr = cm.pixdata_to_ndarray(cm.ndarray_to_pixdata(x, cmap=cm_ident, norm=lambda x: x/255.0),h,w)
         assert_array_equal(x, arr[:,:,0]) 
         assert_array_equal(x, arr[:,:,1]) 

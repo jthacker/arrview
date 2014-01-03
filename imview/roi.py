@@ -6,33 +6,34 @@ from traits.api import (HasTraits, List, Instance,
     String, Event, on_trait_change)
 from traitsui.api import View, Item, ListEditor
 
-SlicePoly = namedtuple('SlicePoly', ('dims', 'poly'))
+from .util import rep
+
+
+ROISlice = namedtuple('ROISlice', ('xdim', 'ydim', 'slc', 'poly'))
 
 
 class ROI(HasTraits):
     name = String
-    polys = List(SlicePoly)
+    poly = Instance(ROISlice)
 
-    def add_poly(self, dims, poly):
+    def set_poly(self, slicer, poly):
         '''Add a polygon to the ROI
         Args:
-        poly -- (ndarray) 2D points array that describes the polygon
-                in array coordinates: [(r1,c1), (r2,c2), ..., (rN,cN)]
-        dims -- a list selecting which dims this roi is on
+        slicer -- slicer object from which the poly was created
+        poly   -- (ndarray) 2D points array that describes the polygon
+                  in array coordinates: [(r1,c1), (r2,c2), ..., (rN,cN)]
         '''
         assert poly.ndim == 2
-        assert len(dims) >= 2
-        self.polys.append(SlicePoly(dims,poly))
+        assert len(slicer.slc) >= 2
+        self.poly = ROISlice(slicer.xdim, slicer.ydim, slicer.slc, poly)
 
-    def _dims_to_slice(self, dims, rr, cc):
-        dims = list(dims)
-        rrIdx = dims.index(slice(None))
-        ccIdx = dims.index(slice(None), rrIdx+1)
-        assert 0 <= rrIdx < len(dims)
-        assert rrIdx < ccIdx < len(dims)
-        dims[rrIdx] = rr
-        dims[ccIdx] = cc
-        return dims
+    def _dims_to_slice(self, xdim, ydim, slc, rr, cc):
+        slc = list(slc)
+        rrIdx = ydim
+        ccIdx = xdim
+        slc[rrIdx] = rr
+        slc[ccIdx] = cc
+        return slc
 
     def to_mask(self, shape):
         '''Convert the polygons to a binary mask according the specified array shape
@@ -44,20 +45,20 @@ class ROI(HasTraits):
         set to false
         '''
         mask = np.zeros(shape)
-        for dims,poly in self.polys:
-            rr,cc = skimage.draw.polygon(poly[:,0], poly[:,1])
-            slc = self._dims_to_slice(dims, rr, cc)
-            mask[slc] = 1
+        xdim,ydim,slc,poly = self.poly
+        rr,cc = skimage.draw.polygon(poly[:,0], poly[:,1])
+        polyslice = self._dims_to_slice(xdim, ydim, slc, rr, cc)
+        mask[polyslice] = 1
         return mask
 
-    def __str__(self):
-        return "ROI(name=%s)" % (self.name)
+    def __repr__(self):
+        return rep(self, ['name','poly'])
 
 
 class ROIManager(HasTraits):
-    rois = List(ROI)
+    rois = List(ROI, [])
 
-    view = View(Item('rois', editor=ListEditor()))
+    view = View(Item('rois', editor=ListEditor(), show_label=False))
 
     def add(self, roi):
         self.rois.append(roi)

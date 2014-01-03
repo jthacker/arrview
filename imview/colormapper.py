@@ -1,29 +1,24 @@
 import numpy as np
 from matplotlib.cm import gray, jet, spectral
-from matplotlib.colors import Normalize,LogNorm
 from collections import namedtuple
 
 from PySide.QtGui import QPixmap, QImage
-from traits.api import (HasPrivateTraits, Any, Instance, Property, Range, Float,
+
+from traits.api import (HasTraits, HasPrivateTraits, Any, Instance, Property, Range, Float,
         on_trait_change, cached_property)
-from traitsui.api import View, Item, EnumEditor
+from traitsui.api import View, Item, EnumEditor, RangeEditor, Group
 
 
 def ndarray_to_pixdata(array, cmap, norm):
     '''Convert an array to a QPixmap using the given color map
     and scaling. Returns an array and the pixmap, the array must
     be held onto as long as the pixmap is around.
-
-    TODO:
-    * Add support for scaling
-    * Add support for colormaps
     '''
     assert array.ndim == 2, 'Only 2D arrays are allowed'
     h,w = array.shape
     array = (255*cmap(norm(array))).astype('uint32')
     array = (255 << 24 | array[:,:,0] << 16 | array[:,:,1] << 8 | array[:,:,2]).flatten()
     return array
-
 
 def pixdata_to_ndarray(pixmap,h,w):
     assert pixmap.ndim == 1
@@ -51,23 +46,62 @@ def ndarray_to_arraypixmap(array, cmap=gray, norm=lambda a: Normalize()(a)):
     return ArrayPixmap(data, pixmap)
 
 
-Norm = namedtuple('Norm', ('name', 'init'))
+class Norm(HasTraits):
+    name = 'Linear'
+    vmin = Float
+    vmax = Float
+    low = Float
+    high = Float
+    
+    view = View(
+            Item('vmin', 
+                label='vmin',
+                editor=RangeEditor(
+                    low_name='low',
+                    high_name='high',
+                    format='%0.2f')),
+            Item('vmax', 
+                label='vmax',
+                editor=RangeEditor(
+                    low_name='low',
+                    high_name='high',
+                    format='%0.2f')))
+
+    def __init__(self):
+        super(Norm, self).__init__()
+        self._scaled = False
+
+    def set_scale(self, ndarray):
+        vmin,vmax = ndarray.min(),ndarray.max()
+        self.vmin = vmin
+        self.vmax = vmax
+        self.low = vmin
+        self.high = vmax
+        self._scaled = True
+
+    def normalize(self, ndarray):
+        if not self._scaled:
+            self.set_scale(ndarray)
+        
+        vmin, vmax = self.vmin, self.vmax
+        if vmin == vmax:
+            return np.zeros_like(ndarray)
+        else:
+            return np.clip((ndarray - vmin) / (vmax - vmin), 0, 1)
+
+    def __repr__(self):
+        return 'Norm(name=%s, vmin=%f, vmax=%f)' % (self.name, self.vmin, self.vmax)
+
+
 _cmaps = [jet,gray,spectral]
-_norms = [Norm('MinMax', Normalize), Norm('Log', LogNorm)]
 
 class ColorMapper(HasPrivateTraits):
     cmap = Any(_cmaps[0])
-    _norm = Any(_norms[0])
-    norm = Property(depends_on='[_norm]')
+    norm = Instance(Norm, Norm)
 
     view = View(
-            Item('cmap', label='cmap',
-                editor=EnumEditor(values={c:c.name for c in _cmaps})),
-            Item('_norm', label='norm',
-                editor=EnumEditor(values={n:n.name for n in _norms})))
+            Item('cmap', show_label=False,
+                editor=EnumEditor(values={c:c.name for c in _cmaps}))) 
 
-    @cached_property
-    def _get_norm(self):
-        return self._norm.init()
-        
-
+    def array_to_pixmap(self, array):
+        return ndarray_to_arraypixmap(array, self.cmap, self.norm.normalize)

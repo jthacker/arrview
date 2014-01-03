@@ -1,29 +1,26 @@
-from PySide.QtCore import *
-from PySide.QtGui import *
+from PySide.QtCore import Qt, Signal, QRectF
+from PySide.QtGui import (QGraphicsView, QGraphicsPixmapItem,
+        QGraphicsScene, QBrush)
 
-import numpy as np
-
+from traits.api import (Instance, HasTraits, Int, 
+        on_trait_change, List)
 from traitsui.qt4.editor import Editor
 from traitsui.qt4.basic_editor_factory import BasicEditorFactory
-from traits.api import Instance, HasTraits, Tuple, Int, Event
 
-from .. import colormapper as cm
+from .tools import GraphicsTool, PanTool, ZoomTool, MouseState, MouseButtons
 
 class ArrayGraphicsView(QGraphicsView):
     '''ArrayGraphicsView is used for viewing a numpy array.
-    Features:
-    * Panning around with left click
-    * Zooming with mouse wheel
 
-    FIXME
-    * Default cursor should be the pointer not a hand
+    TODO:
     * When image is loaded it should be zoomed to fit the window
     * Maximum zoom should be based on pixel size
     '''
-    mousemoved = Signal(float, float)
-    mousewheeled = Signal(float, float, int)
-    mousepressed = Signal(float, float)
-    mousereleased = Signal(float, float)
+    mousemoved = Signal(object)
+    mousewheeled = Signal(object)
+    mousedoubleclicked = Signal(object)
+    mousepressed = Signal(object)
+    mousereleased = Signal(object)
     
     def __init__(self):
         super(ArrayGraphicsView, self).__init__()
@@ -34,32 +31,36 @@ class ArrayGraphicsView(QGraphicsView):
         self.setScene(QGraphicsScene())
         self.scene().addItem(self.pixmapItem)
         self.setBackgroundBrush(QBrush(Qt.black))
+        self.setMouseTracking(True)
 
-    def _to_item_coords(self, ev):
+    def mouseevent_to_item_coords(self, ev):
         sp = self.mapToScene(ev.pos())
         p = self.pixmapItem.mapFromScene(sp)
         return (p.x(), p.y())
   
     def mouseReleaseEvent(self, ev):
         super(ArrayGraphicsView, self).mouseReleaseEvent(ev)
-        self.mousereleased.emit(*self._to_item_coords(ev))
+        self.mousereleased.emit(ev)
 
     def mousePressEvent(self, ev):
         super(ArrayGraphicsView, self).mousePressEvent(ev)
-        self.mousepressed.emit(*self._to_item_coords(ev))
+        self.mousepressed.emit(ev)
 
     def mouseMoveEvent(self, ev):
         super(ArrayGraphicsView, self).mouseMoveEvent(ev)
-        self.mousemoved.emit(*self._to_item_coords(ev))
+        self.mousemoved.emit(ev)
+
+    def mouseDoubleClickEvent(self, ev):
+        super(ArrayGraphicsView, self).mouseDoubleClickEvent(ev)
+        self.mousedoubleclicked.emit(ev)
 
     def wheelEvent(self, ev):
-        x,y = self._to_item_coords(ev)
-        self.mousewheeled.emit(x,y,ev.delta())
+        self.mousewheeled.emit(ev)
         
     def setPixmap(self, pixmap):
         '''Set the array to be viewed.
         Args:
-        array (numpy array): the array to be viewed
+        array (numpy array): the array to be vieweds
 
         This will remove the previous array but maintain the previous scaling 
         as well as the panned position.
@@ -77,49 +78,63 @@ class ArrayGraphicsView(QGraphicsView):
         self.fitInView(self.sceneRect(), Qt.KeepAspectRatio)
 
 
-class MouseInput(HasTraits):
-    pos = Tuple()
-    delta = Int()
-
-    wheeled = Event
-    pressed = Event
-    moved = Event
-
-    def __repr__(self):
-        return "MouseInput(pos=%s,delta=%s)" % (self.pos, self.delta)
-
-
-class _SlicerEditor(Editor):
-    mouse = Instance(MouseInput)
+class _PixmapEditor(Editor):
+    mouse = Instance(MouseState, MouseState)
+    tools = List(GraphicsTool)
     
     def init(self, parent):
-        self.mouse = self.factory.mouse
-        self.control = self.factory.view
-        self.control.setPixmap(self.value)
+        self.control = ArrayGraphicsView()
         self.control.mousemoved.connect(self._mouse_moved)
         self.control.mousepressed.connect(self._mouse_pressed)
         self.control.mousewheeled.connect(self._mouse_wheel_moved)
+        self.control.mousereleased.connect(self._mouse_released)
+        self.control.mousedoubleclicked.connect(self._mouse_double_clicked)
+        self.control.setPixmap(self.value)
         self.control.fitView()
+        self.tools = self.factory.tools
+
+    @on_trait_change('tools[]')
+    def tool_changed(self, trait, name, prev, curr):
+        print('tools[]',trait,name,prev,curr)
+        for p in prev:
+            p.destroy()
+        for c in curr:
+            c.init(graphics=self.control, mouse=self.mouse)
 
     def update_editor(self):
         self.control.setPixmap(self.value)
 
-    def _mouse_moved(self, x, y):
-        self.mouse.pos = (x,y)
+    def _config_mouse(self, ev):
+        self.mouse.coords = self.control.mouseevent_to_item_coords(ev)
+        self.mouse.screenCoords = (ev.pos().x(), ev.pos().y())
+        buttons = MouseButtons()
+        buttons.left = ev.buttons() & Qt.LeftButton
+        buttons.middle = ev.buttons() & Qt.MiddleButton
+        buttons.right = ev.buttons() & Qt.RightButton
+        self.mouse.buttons = buttons
+
+    def _mouse_moved(self, ev):
+        self._config_mouse(ev)
         self.mouse.moved = True
 
-    def _mouse_pressed(self, x, y):
-        self.mouse.pos = (x,y)
+    def _mouse_pressed(self, ev):
+        self._config_mouse(ev)
         self.mouse.pressed = True
 
-    def _mouse_wheel_moved(self, x, y, delta):
-        self.mouse.pos = (x,y)
-        self.mouse.delta = delta
+    def _mouse_wheel_moved(self, ev):
+        self._config_mouse(ev)
+        self.mouse.delta = ev.delta()
         self.mouse.wheeled = True
 
+    def _mouse_released(self, ev):
+        self._config_mouse(ev)
+        self.mouse.released = True
 
-class SlicerEditor(BasicEditorFactory):
-    klass = _SlicerEditor
+    def _mouse_double_clicked(self, ev):
+        self._config_mouse(ev)
+        self.mouse.doubleclicked = True
 
-    mouse = Instance(MouseInput)
-    view = Instance(ArrayGraphicsView)
+
+class PixmapEditor(BasicEditorFactory):
+    klass = _PixmapEditor
+    tools = List(GraphicsTool, [PanTool(), ZoomTool()])

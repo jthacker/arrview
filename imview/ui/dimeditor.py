@@ -55,21 +55,19 @@ class SlicerDims(HasPrivateTraits):
     _dimlist = List
 
     view = View(
-            Group(
-                HGroup(
-                    Item('_dimlist', editor=DimEditor(), show_label=False), 
-                    Spring()),
+            HGroup(
+                Item('_dimlist', editor=DimEditor(), 
+                    springy=False, show_label=False), 
                 Item('freedim', style='custom', show_label=False)))
 
     def __init__(self, slicer):
         super(SlicerDims, self).__init__(slicer=slicer)
-        slcdims = slicer.dims
         dims = [None] * slicer.ndim
-        dims[slcdims.x] = 'x'
-        dims[slcdims.y] = 'y'
-        if slcdims.free:
-            zdim = sorted(slcdims.free)[0] 
-            dims[zdim] = 'z'
+        dims[slicer.xdim] = 'x'
+        dims[slicer.ydim] = 'y'
+        freedims = slicer.freedims
+        if freedims:
+            dims[freedims[0]] = 'z'
         self.freedim = FreeDim()
         self._dimlist = dims
     

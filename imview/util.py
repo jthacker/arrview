@@ -4,6 +4,7 @@ def unique(iterable):
     '''Returns true or false if the items in the iterable are unique'''
     return len(iterable) == len(set(iterable))
 
+
 def weave(item, iterable):
     '''Put item inbetween each element of iterable.
     Args:
@@ -19,3 +20,13 @@ def weave(item, iterable):
                 yield item()
             else:
                 yield item
+
+
+def rep(obj, props):
+    s = obj.__class__.__name__
+    s += '(%s)' % ','.join(['%s=%r' % (prop,getattr(obj,prop)) for prop in props])
+    return s
+
+
+def clamp(val, min_val, max_val):
+    return max(min(val, max_val), min_val)

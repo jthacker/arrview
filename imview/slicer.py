@@ -2,9 +2,7 @@ from collections import namedtuple
 import numpy as np
 from traits.api import (HasTraits,
         Instance, Int, List, Property, cached_property)
-from .util import unique
-
-ArrayDims = namedtuple('ArrayDims', ('x','y','free'))
+from .util import unique, rep
 
 class SliceTuple(tuple):
     def _repr(self, s):
@@ -21,43 +19,50 @@ class SliceTuple(tuple):
 
 
 class Slicer(HasTraits):
-    dims = Instance(ArrayDims)
-    slc  = Instance(SliceTuple)
-    view = Property(depends_on='[dims,slc]')
+    xdim = Int
+    ydim = Int
+    slc = Instance(SliceTuple)
+    freedims = Property()
+    shape = Property()
     ndim = Property()
+    view = Property(depends_on='[slc,xdim,ydim]')
 
     def __init__(self, arr, xdim=1, ydim=0):
         '''Wraps a numpy array to keep track of a 2D slice.
         The viewing dimension default to x=1 and y=0'''
-        assert arr.ndim >= 2, 'Arr must have at least 2 dimensions'
-        assert xdim != ydim, 'xDim and yDim must be different'
+        assert arr.ndim >= 2, 'arr must be at least 2 dimensions'
+        assert xdim != ydim, 'diminsion x must be different from y'
         super(Slicer, self).__init__()
 
         self._arr = arr
-        self.slc = SliceTuple([0]*arr.ndim)
-        self.dims = ArrayDims(xdim, ydim, self._get_freedims(xdim,ydim))
-        self.set_viewdims(xdim,ydim)
-    
+        self._set_dims([0]*self.ndim, xdim, ydim)
+
     def _get_ndim(self):
         return self._arr.ndim
+    
+    def _get_shape(self):
+        return self._arr.shape
 
-    def _get_freedims(self, xdim, ydim):
-        return set(range(self._arr.ndim)) - set((xdim,ydim))
-       
+    def _get_freedims(self):
+        return [i for i,x in enumerate(self.slc) if x != slice(None)]
+
     def set_viewdims(self, xdim, ydim):
         '''Select a 2D view from the higher dimension array.
         View dims are swapped if xDim > yDim'''
-        assert 0 <= xdim < self._arr.ndim
-        assert 0 <= ydim < self._arr.ndim
+        assert 0 <= xdim < self.ndim
+        assert 0 <= ydim < self.ndim
         
-        cxdim,cydim,_ = self.dims
         slc = list(self.slc)
-        slc[cxdim] = 0
-        slc[cydim] = 0
+        slc[self.xdim] = 0
+        slc[self.ydim] = 0
+        self._set_dims(slc, xdim, ydim)
+
+    def _set_dims(self, slc, xdim, ydim):
         slc[xdim] = slice(None)
         slc[ydim] = slice(None)
         self.slc = SliceTuple(slc)
-        self.dims = ArrayDims(xdim,ydim,self._get_freedims(xdim,ydim))
+        self.xdim = xdim
+        self.ydim = ydim
 
     def set_freedim(self, dim, val):
         '''Set the dimension dim to the value val.
@@ -70,11 +75,11 @@ class Slicer(HasTraits):
         be anchored autmatically to either 0 or max of the dimension range depending
         on which one it is closer to.
         '''
-        assert 0 <= dim < self._arr.ndim, 'Dim [%d] must be in [0,%d)' % (dim, self._arr.ndim)
+        assert 0 <= dim < self.ndim, 'Dim [%d] must be in [0,%d)' % (dim, self.ndim)
 
-        xdim,ydim,_ = self.dims
+        xdim,ydim = self.xdim,self.ydim
         if dim != xdim and dim != ydim:
-            dMax = self._arr.shape[dim]
+            dMax = self.shape[dim]
             if val >= dMax:
                 val = dMax - 1
             if val < 0:
@@ -85,16 +90,14 @@ class Slicer(HasTraits):
 
     def dim_size(self, dim):
         '''Get the size of a specific dim'''
-        assert 0 <= dim <= self._arr.ndim, '0<=d<=%d but was d=%d' % (self._arr.ndim, dim)
-        return self._arr.shape[dim]
+        assert 0 <= dim <= self.ndim, '0<=d<=%d but was d=%d' % (self.ndim, dim)
+        return self.shape[dim]
 
     @cached_property
     def _get_view(self):
         '''Get the current view of the array'''
         a = self._arr[self.slc]
-        xdim,ydim,_ = self.dims
-        return a.transpose() if ydim > xdim else a
+        return a.transpose() if self.ydim > self.xdim else a
 
     def __repr__(self):
-        return "Slicer(arr=%r, slice=%r, dims=%r)" % (self._arr, self.slc, self.dims)
-
+        return rep(self, ['_arr','xdim','ydim','slc'])

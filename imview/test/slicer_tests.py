@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.testing import assert_array_equal
-from ..slicer import Slicer,ArrayDims,SliceTuple
+from ..slicer import Slicer,SliceTuple
 from traits.testing.unittest_tools import unittest
 from traits.testing.api import UnittestTools
 
@@ -19,46 +19,42 @@ class TestSlicer(unittest.TestCase, UnittestTools):
 
     def test_viewdims_default(self):
         slicer = Slicer(self.arr)
-        xDim,yDim,_ = slicer.dims
-        assert xDim == 1, 'xDim is %d, but should be 1' % xDim
-        assert yDim == 0, 'yDim is %d, but should be 0' % yDim
+        xdim,ydim = slicer.xdim,slicer.ydim
+        assert xdim == 1, 'xdim is %d, but should be 1' % xdim
+        assert ydim == 0, 'ydim is %d, but should be 0' % ydim
 
     def test_set_viewdims(self):
         slicer = Slicer(self.arr)
         slicer.set_viewdims(0,1)
-        xDim,yDim,_ = slicer.dims
-        assert xDim == 0, 'xDim is %d, but should be 0' % xDim
-        assert yDim == 1, 'yDim is %d, but should be 1' % yDim
-
-    def test_freedims_default(self):
-        arr = np.arange(100).reshape([5,2,5,2])
-        slicer = Slicer(arr)
-        _,_,freedims = slicer.dims
-        assert set((2,3)) == freedims
+        xdim,ydim = slicer.xdim,slicer.ydim
+        assert xdim == 0, 'xdim is %d, but should be 0' % xDim
+        assert ydim == 1, 'ydim is %d, but should be 1' % yDim
 
     def test_freedims_change_when_viewdims_set(self):
         arr = np.arange(100).reshape([5,2,5,2])
         slicer = Slicer(arr)
         slicer.set_viewdims(1,3)
-        _,_,freedims = slicer.dims
-        assert set((0,2)) == freedims
+        assert SliceTuple([0,slice(None),0,slice(None)]) == slicer.slc
+        assert slicer.freedims == [0,2]
 
     def test_swap_dims(self):
         slicer = Slicer(self.arr)
         assert_array_equal(self.arr, slicer.view)
         # Swap the dimensions
-        xDimOrig,yDimOrig,_ = slicer.dims
+        xDimOrig,yDimOrig = slicer.xdim, slicer.ydim
         slicer.set_viewdims(yDimOrig, xDimOrig)
-        xDim,yDim,_ = slicer.dims
+        xDim,yDim = slicer.xdim, slicer.ydim
         assert xDim == yDimOrig
         assert yDim == xDimOrig
         assert_array_equal(self.arr.T, slicer.view)
 
     def test_dims_changed_event(self):
         slicer = Slicer(self.arr)
-        with self.assertTraitChanges(slicer, 'dims') as result:
+        with self.assertTraitChanges(slicer, '[xdim,ydim]') as result:
             slicer.set_viewdims(0,1)
-        expected = [(slicer, 'dims', ArrayDims(1,0,set()), ArrayDims(0,1,set()))]
+        slc = SliceTuple([slice(None),slice(None)])
+        expected = [(slicer, 'xdim', 1, 0),
+                    (slicer, 'ydim', 0, 1)]
         self.assertSequenceEqual(result.events, expected)
 
     def test_slc_changed_event(self):
