@@ -3,7 +3,7 @@ import numpy as np
 from collections import namedtuple
 
 from traits.api import (HasTraits, List, Instance, 
-    String, Event, on_trait_change)
+    String, Int, Event, on_trait_change)
 from traitsui.api import View, Item, ListEditor
 
 from .util import rep
@@ -14,7 +14,9 @@ ROISlice = namedtuple('ROISlice', ('xdim', 'ydim', 'slc', 'poly'))
 
 class ROI(HasTraits):
     name = String
-    poly = Instance(ROISlice)
+    slc = Instance(ROISlice)
+
+    view = View(Item('name', show_label=False))
 
     def set_poly(self, slicer, poly):
         '''Add a polygon to the ROI
@@ -25,7 +27,7 @@ class ROI(HasTraits):
         '''
         assert poly.ndim == 2
         assert len(slicer.slc) >= 2
-        self.poly = ROISlice(slicer.xdim, slicer.ydim, slicer.slc, poly)
+        self.slc = ROISlice(slicer.xdim, slicer.ydim, slicer.slc, poly)
 
     def _dims_to_slice(self, xdim, ydim, slc, rr, cc):
         slc = list(slc)
@@ -45,20 +47,29 @@ class ROI(HasTraits):
         set to false
         '''
         mask = np.zeros(shape)
-        xdim,ydim,slc,poly = self.poly
+        xdim,ydim,slc,poly = self.slc
         rr,cc = skimage.draw.polygon(poly[:,0], poly[:,1])
         polyslice = self._dims_to_slice(xdim, ydim, slc, rr, cc)
         mask[polyslice] = 1
         return mask
 
     def __repr__(self):
-        return rep(self, ['name','poly'])
+        return rep(self, ['name','slc'])
 
 
 class ROIManager(HasTraits):
     rois = List(ROI, [])
+    nextID = Int(1)
 
-    view = View(Item('rois', editor=ListEditor(), show_label=False))
-
+    view = View(Item('rois', 
+        editor=ListEditor(style='custom'), 
+        show_label=False))
+    
     def add(self, roi):
+        self.nextID += 1
         self.rois.append(roi)
+
+    def new_roi(self, slicer, poly):
+        roi = ROI(name='roi_%02d' % self.nextID)
+        roi.set_poly(slicer, poly)
+        self.add(roi)

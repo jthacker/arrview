@@ -1,9 +1,10 @@
 from PySide.QtGui import QPen,QBrush,QColor
 from PySide.QtCore import Qt
 
-def default_roi_pen():
+def default_roi_pen(dashed=True):
     pen = QPen()
-    pen.setStyle(Qt.DashLine)
+    if dashed:
+        pen.setStyle(Qt.DashLine)
     pen.setBrush(Qt.green)
     pen.setCapStyle(Qt.RoundCap)
     pen.setJoinStyle(Qt.RoundJoin)

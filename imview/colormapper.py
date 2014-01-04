@@ -4,10 +4,12 @@ from collections import namedtuple
 
 from PySide.QtGui import QPixmap, QImage
 
-from traits.api import (HasTraits, HasPrivateTraits, Any, Instance, Property, Range, Float,
-        on_trait_change, cached_property)
-from traitsui.api import View, Item, EnumEditor, RangeEditor, Group
+from traits.api import (HasTraits, HasPrivateTraits, Any, Instance, 
+        Property, Range, Float, on_trait_change, cached_property,
+        Button)
+from traitsui.api import View, HGroup, Item, EnumEditor, RangeEditor, Group
 
+from .slicer import Slicer
 
 def ndarray_to_pixdata(array, cmap, norm):
     '''Convert an array to a QPixmap using the given color map
@@ -98,10 +100,18 @@ _cmaps = [jet,gray,spectral]
 class ColorMapper(HasPrivateTraits):
     cmap = Any(_cmaps[0])
     norm = Instance(Norm, Norm)
+    slicer = Instance(Slicer)
+    rescale = Button
 
     view = View(
-            Item('cmap', show_label=False,
-                editor=EnumEditor(values={c:c.name for c in _cmaps}))) 
+            HGroup(
+                Item('cmap', show_label=False,
+                    editor=EnumEditor(values={c:c.name for c in _cmaps})),
+                Item('rescale', show_label=False)))
 
     def array_to_pixmap(self, array):
         return ndarray_to_arraypixmap(array, self.cmap, self.norm.normalize)
+
+    def _rescale_fired(self):
+        self.norm.set_scale(self.slicer._arr)
+

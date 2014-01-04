@@ -47,11 +47,11 @@ class TestROI(unittest.TestCase, UnittestTools):
     def test_poly_changed(self):
         roi = ROI(name='test')
         slicer = Slicer(np.zeros((2,2,2)))
-        with self.assertTraitChanges(roi, 'poly') as result:
+        with self.assertTraitChanges(roi, 'slc') as result:
             roi.set_poly(slicer, self.sqrPoly)
        
         roislice = ROISlice(slicer.xdim, slicer.ydim, slicer.slc, self.sqrPoly)
-        expected = [(roi, 'poly', None, roislice)]
+        expected = [(roi, 'slc', None, roislice)]
         self.assertSequenceEqual(result.events, expected)
 
     def test_mask_transpose_when_swapping_view_dims(self):

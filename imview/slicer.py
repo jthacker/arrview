@@ -60,9 +60,9 @@ class Slicer(HasTraits):
     def _set_dims(self, slc, xdim, ydim):
         slc[xdim] = slice(None)
         slc[ydim] = slice(None)
-        self.slc = SliceTuple(slc)
         self.xdim = xdim
         self.ydim = ydim
+        self.slc = SliceTuple(slc)
 
     def set_freedim(self, dim, val):
         '''Set the dimension dim to the value val.

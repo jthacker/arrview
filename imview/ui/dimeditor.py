@@ -1,9 +1,11 @@
 from traits.api import (HasPrivateTraits, Property, Int, Instance,
-        List, on_trait_change)
+        List, Bool, Range, on_trait_change)
 from traitsui.api import (View, Group, Item, RangeEditor, HGroup,
         Spring)
 from traitsui.qt4.editor import Editor
 from traitsui.qt4.basic_editor_factory import BasicEditorFactory
+
+from PySide.QtCore import QTimer
 
 from .listeditor import ListOrderWidget
 from ..slicer import Slicer
@@ -40,13 +42,42 @@ class FreeDim(HasPrivateTraits):
     dim = Int
     val = Int(0)
     val_high = Int
+    fps = Range(low=1, high=30, value=30)
+    sleep_ms = Property(depends_on=['fps'])
+    autoInc = Bool(False)
 
-    view = View(Item('val',
-        editor=RangeEditor(
-            low=0,
-            high_name='val_high',
-            mode='slider'),
-        show_label=False))
+    view = View(
+            HGroup(
+                Item('autoInc',
+                    label='Inc'),
+                Item('fps'),
+                Item('val',
+                    editor=RangeEditor(
+                        low=0,
+                        high_name='val_high',
+                        mode='slider'))))
+
+    def __init__(self, **traits):
+        super(FreeDim, self).__init__(**traits)
+        self._timer = QTimer()
+        self._timer.timeout.connect(self.inc)
+
+    def _get_sleep_ms(self):
+        time = int(1000.0/self.fps)
+        return time
+
+    @on_trait_change('autoInc,fps')
+    def autoinc_toggled(self):
+        if self.autoInc:
+            self._timer.start(self.sleep_ms)
+        else:
+            self._timer.stop()
+
+    def inc(self):
+        if self.val == self.val_high:
+            self.val = 0
+        else:
+            self.val += 1
 
 
 class SlicerDims(HasPrivateTraits):

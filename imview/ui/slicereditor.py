@@ -2,12 +2,12 @@ from PySide.QtCore import Qt, Signal, QRectF
 from PySide.QtGui import (QGraphicsView, QGraphicsPixmapItem,
         QGraphicsScene, QBrush)
 
-from traits.api import (Instance, HasTraits, Int, 
+from traits.api import (Instance, HasTraits, Int, WeakRef,
         on_trait_change, List)
 from traitsui.qt4.editor import Editor
 from traitsui.qt4.basic_editor_factory import BasicEditorFactory
 
-from .tools import GraphicsTool, PanTool, ZoomTool, MouseState, MouseButtons
+from .tools import GraphicsTool, GraphicsToolFactory, MouseState, MouseButtons
 
 class ArrayGraphicsView(QGraphicsView):
     '''ArrayGraphicsView is used for viewing a numpy array.
@@ -60,7 +60,7 @@ class ArrayGraphicsView(QGraphicsView):
     def setPixmap(self, pixmap):
         '''Set the array to be viewed.
         Args:
-        array (numpy array): the array to be vieweds
+        array (numpy array): the array to be viewed
 
         This will remove the previous array but maintain the previous scaling 
         as well as the panned position.
@@ -80,8 +80,8 @@ class ArrayGraphicsView(QGraphicsView):
 
 class _PixmapEditor(Editor):
     mouse = Instance(MouseState, MouseState)
-    tools = List(GraphicsTool)
-    
+    tools = List(GraphicsTool, [])
+
     def init(self, parent):
         self.control = ArrayGraphicsView()
         self.control.mousemoved.connect(self._mouse_moved)
@@ -91,15 +91,7 @@ class _PixmapEditor(Editor):
         self.control.mousedoubleclicked.connect(self._mouse_double_clicked)
         self.control.setPixmap(self.value)
         self.control.fitView()
-        self.tools = self.factory.tools
-
-    @on_trait_change('tools[]')
-    def tool_changed(self, trait, name, prev, curr):
-        print('tools[]',trait,name,prev,curr)
-        for p in prev:
-            p.destroy()
-        for c in curr:
-            c.init(graphics=self.control, mouse=self.mouse)
+        self.tools = self.factory.init_tools(self.control, self.mouse)
 
     def update_editor(self):
         self.control.setPixmap(self.value)
@@ -137,4 +129,7 @@ class _PixmapEditor(Editor):
 
 class PixmapEditor(BasicEditorFactory):
     klass = _PixmapEditor
-    tools = List(GraphicsTool, [PanTool(), ZoomTool()])
+    tools = List(GraphicsToolFactory, [])
+
+    def init_tools(self, graphics, mouse):
+        return [t.init_tool(graphics, mouse) for t in self.tools]
