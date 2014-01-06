@@ -95,7 +95,7 @@ class Norm(HasTraits):
         return 'Norm(name=%s, vmin=%f, vmax=%f)' % (self.name, self.vmin, self.vmax)
 
 
-_cmaps = [jet,gray,spectral]
+_cmaps = [gray,jet,spectral]
 
 class ColorMapper(HasPrivateTraits):
     cmap = Any(_cmaps[0])
@@ -117,4 +117,4 @@ class ColorMapper(HasPrivateTraits):
         return ndarray_to_arraypixmap(array, self.cmap, self.norm.normalize)
 
     def _rescale_fired(self):
-        self.norm.set_scale(self.slicer._arr)
+        self.norm.set_scale(self.slicer.arr)

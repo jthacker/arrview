@@ -35,8 +35,8 @@ class MouseButtons(object):
 
 
 class MouseState(HasTraits):
-    coords = Tuple((0,0))
-    screenCoords = Tuple((0,0))
+    coords = Tuple(Float, Float, default=(0,0))
+    screenCoords = Tuple(Float, Float, default=(0,0))
     delta = Int
     buttons = Instance(MouseButtons, MouseButtons)
 
@@ -139,7 +139,7 @@ class _ROIDrawTool(GraphicsTool):
     roiManager = Instance(ROIManager)
 
     def init(self):
-        self._initialPoint = None
+        self._origin = None
         self._points = []
         self._polyItem = self.graphics.scene().addPolygon(QPolygonF(),
                 settings.default_roi_pen(), settings.default_roi_brush())
@@ -149,35 +149,35 @@ class _ROIDrawTool(GraphicsTool):
     def mouse_pressed(self):
         if self.mouse.buttons.left:
             x,y = self.mouse.coords
-            if self._initialPoint is None:
-                self._initialPoint = QPointF(round(x),round(y))
-                self._points = [self._initialPoint]
+            if self._origin is None:
+                self._origin = QPointF(round(x),round(y))
+                self._points = [self._origin]
             else:
-                self._initialPoint = None
+                self._origin = None
                 closedPts = _close_polygon(self._points[-1], self._points[0])
                 self._points.extend(closedPts)
                 self._polyItem.setPolygon(QPolygonF())
                 poly = np.array([(p.y(),p.x()) for p in self._points])
-                self.roiManager.new_roi(self.slicer, poly)
+                self.roiManager.new(self.slicer, poly)
 
     def mouse_moved(self):
         x,y = self.mouse.coords
-        if self._initialPoint is not None:
+        if self._origin is not None:
             p = QPointF(x,y)
-            v = p - self._initialPoint
+            v = p - self._origin
             vx,vy = abs(v.x()), abs(v.y())
             if vx > vy:
                 v.setY(0)
             else:
                 v.setX(0)
-            pts = self._points + [self._initialPoint + v]
+            pts = self._points + [self._origin + v]
             self._polyItem.setPolygon(QPolygonF(pts))
 
             if vx >= 0.8 or vy >= 0.8:
-                p1 = self._initialPoint + v
+                p1 = self._origin + v
                 p1 = QPointF(round(p1.x()), round(p1.y()))
                 self._points.append(p1)
-                self._initialPoint = p1
+                self._origin = p1
 
 
 class ROIDrawTool(GraphicsToolFactory):

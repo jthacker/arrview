@@ -4,6 +4,7 @@ from traits.api import (HasTraits,
         Tuple, Property, cached_property)
 from .util import unique, rep
 
+
 class SliceTuple(tuple):
     @property
     def xdim(self):
@@ -39,6 +40,7 @@ class Slicer(HasTraits):
     view = Property(depends_on='slc')
     shape = Property()
     ndim = Property()
+    arr = Property()
 
     def __init__(self, arr, xdim=1, ydim=0):
         '''Wraps a numpy array to keep track of a 2D slice.
@@ -51,10 +53,13 @@ class Slicer(HasTraits):
         self._set_dims([0]*self.ndim, xdim, ydim)
 
     def _get_ndim(self):
-        return self._arr.ndim
+        return self.arr.ndim
     
     def _get_shape(self):
-        return self._arr.shape
+        return self.arr.shape
+
+    def _get_arr(self):
+        return self._arr
 
     def set_viewdims(self, xdim, ydim):
         '''Select a 2D view from the higher dimension array.
@@ -99,8 +104,8 @@ class Slicer(HasTraits):
     @cached_property
     def _get_view(self):
         '''Get the current view of the array'''
-        a = self._arr[self.slc.arrayslice]
+        a = self.arr[self.slc.arrayslice]
         return a.transpose() if self.slc.ydim > self.slc.xdim else a
 
     def __repr__(self):
-        return rep(self, ['_arr','slc'])
+        return rep(self, ['arr','slc'])

@@ -31,11 +31,11 @@ class TestSlicer(unittest.TestCase, UnittestTools):
         assert ydim == 1, 'ydim is %d, but should be 1' % yDim
 
     def test_freedims_change_when_viewdims_set(self):
-        arr = np.arange(100).reshape([5,2,5,2])
+        arr = np.arange(100).reshape(5,2,5,2)
         slicer = Slicer(arr)
         slicer.set_viewdims(1,3)
         assert SliceTuple([0,'x',0,'y']) == slicer.slc
-        assert slicer.slc.freedims == [0,2]
+        assert slicer.slc.freedims == (0,2)
 
     def test_swap_dims(self):
         slicer = Slicer(self.arr)
