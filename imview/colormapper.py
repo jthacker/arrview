@@ -6,7 +6,7 @@ from PySide.QtGui import QPixmap, QImage
 
 from traits.api import (HasTraits, HasPrivateTraits, Any, Instance, 
         Property, Range, Float, on_trait_change, cached_property,
-        Button)
+        Button, Bool)
 from traitsui.api import View, HGroup, Item, EnumEditor, RangeEditor, Group
 
 from .slicer import Slicer
@@ -102,16 +102,19 @@ class ColorMapper(HasPrivateTraits):
     norm = Instance(Norm, Norm)
     slicer = Instance(Slicer)
     rescale = Button
+    autoscale = Bool(False)
 
     view = View(
             HGroup(
                 Item('cmap', show_label=False,
                     editor=EnumEditor(values={c:c.name for c in _cmaps})),
-                Item('rescale', show_label=False)))
+                Item('rescale', show_label=False),
+                Item('autoscale')))
 
     def array_to_pixmap(self, array):
+        if self.autoscale:
+            self.norm.set_scale(array)
         return ndarray_to_arraypixmap(array, self.cmap, self.norm.normalize)
 
     def _rescale_fired(self):
         self.norm.set_scale(self.slicer._arr)
-

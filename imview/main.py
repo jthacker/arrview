@@ -64,7 +64,8 @@ class ImageViewer(HasTraits):
                     Group(
                         Item('slicerDims', style='custom', show_label=False),
                         Item('cmap', style='custom', show_label=False))),
-                statusbar = [StatusItem(name='cursorInfo'),
+                statusbar = [
+                    StatusItem(name='cursorInfo'),
                     StatusItem(name='colormapInfo')],
                 resizable=True)
 

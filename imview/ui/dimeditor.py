@@ -93,10 +93,9 @@ class SlicerDims(HasPrivateTraits):
 
     def __init__(self, slicer):
         super(SlicerDims, self).__init__(slicer=slicer)
-        dims = [None] * slicer.ndim
-        dims[slicer.xdim] = 'x'
-        dims[slicer.ydim] = 'y'
-        freedims = slicer.freedims
+        viewdims = slicer.slc.viewdims
+        dims = [x if i in viewdims else None for i,x in enumerate(slicer.slc)]
+        freedims = slicer.slc.freedims
         if freedims:
             dims[freedims[0]] = 'z'
         self.freedim = FreeDim()
@@ -113,7 +112,7 @@ class SlicerDims(HasPrivateTraits):
             zdim = m['z']
             self.freedim.dim = zdim
             self.freedim.val = self.slicer.slc[zdim]
-            self.freedim.val_high = self.slicer.dim_size(zdim)-1
+            self.freedim.val_high = self.slicer.shape[zdim]-1
 
     @on_trait_change('freedim.val')
     def freedim_changed(self):

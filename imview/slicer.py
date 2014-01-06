@@ -1,31 +1,44 @@
 from collections import namedtuple
 import numpy as np
 from traits.api import (HasTraits,
-        Instance, Int, List, Property, cached_property)
+        Tuple, Property, cached_property)
 from .util import unique, rep
 
 class SliceTuple(tuple):
-    def _repr(self, s):
-        if isinstance(s, slice):
-            attrs = (s.start, s.stop, s.stop)
-            attrs = [a if a != None else '' for a in attrs]
-            rep = ':'.join(attrs)
-            return ':' if rep == '::' else rep
-        else:
-            return repr(s)
+    @property
+    def xdim(self):
+        return self.index('x')
 
-    def __repr__(self):
-        return 'ArraySlice(%s)' % ','.join(map(self._repr, self))
+    @property
+    def ydim(self):
+        return self.index('y')
+   
+    @property
+    def viewdims(self):
+        return (self.xdim, self.ydim)
+
+    def is_transposed_view_of(self, slc):
+        s = list(self)
+        # Swap the axes
+        s[self.xdim],s[self.ydim] = s[self.ydim],s[self.xdim]
+        return s == list(slc)
+
+    @property
+    def freedims(self):
+        return tuple(i for i,x in enumerate(self) if i not in self.viewdims)
+
+    @property
+    def arrayslice(self):
+        '''Replace xdim and ydim by slice(None) for indexing an array'''
+        viewdims = self.viewdims
+        return tuple(slice(None) if d in viewdims else x for d,x in enumerate(self))
 
 
 class Slicer(HasTraits):
-    xdim = Int
-    ydim = Int
-    slc = Instance(SliceTuple)
-    freedims = Property()
+    slc = Tuple
+    view = Property(depends_on='slc')
     shape = Property()
     ndim = Property()
-    view = Property(depends_on='[slc,xdim,ydim]')
 
     def __init__(self, arr, xdim=1, ydim=0):
         '''Wraps a numpy array to keep track of a 2D slice.
@@ -43,9 +56,6 @@ class Slicer(HasTraits):
     def _get_shape(self):
         return self._arr.shape
 
-    def _get_freedims(self):
-        return [i for i,x in enumerate(self.slc) if x != slice(None)]
-
     def set_viewdims(self, xdim, ydim):
         '''Select a 2D view from the higher dimension array.
         View dims are swapped if xDim > yDim'''
@@ -53,15 +63,13 @@ class Slicer(HasTraits):
         assert 0 <= ydim < self.ndim
         
         slc = list(self.slc)
-        slc[self.xdim] = 0
-        slc[self.ydim] = 0
+        slc[self.slc.xdim] = 0
+        slc[self.slc.ydim] = 0
         self._set_dims(slc, xdim, ydim)
 
     def _set_dims(self, slc, xdim, ydim):
-        slc[xdim] = slice(None)
-        slc[ydim] = slice(None)
-        self.xdim = xdim
-        self.ydim = ydim
+        slc[xdim] = 'x'
+        slc[ydim] = 'y'
         self.slc = SliceTuple(slc)
 
     def set_freedim(self, dim, val):
@@ -77,7 +85,7 @@ class Slicer(HasTraits):
         '''
         assert 0 <= dim < self.ndim, 'Dim [%d] must be in [0,%d)' % (dim, self.ndim)
 
-        xdim,ydim = self.xdim,self.ydim
+        xdim,ydim = self.slc.viewdims
         if dim != xdim and dim != ydim:
             dMax = self.shape[dim]
             if val >= dMax:
@@ -87,17 +95,12 @@ class Slicer(HasTraits):
             slc = list(self.slc)
             slc[dim] = val
             self.slc = SliceTuple(slc)
-
-    def dim_size(self, dim):
-        '''Get the size of a specific dim'''
-        assert 0 <= dim <= self.ndim, '0<=d<=%d but was d=%d' % (self.ndim, dim)
-        return self.shape[dim]
-
+    
     @cached_property
     def _get_view(self):
         '''Get the current view of the array'''
-        a = self._arr[self.slc]
-        return a.transpose() if self.ydim > self.xdim else a
+        a = self._arr[self.slc.arrayslice]
+        return a.transpose() if self.slc.ydim > self.slc.xdim else a
 
     def __repr__(self):
-        return rep(self, ['_arr','xdim','ydim','slc'])
+        return rep(self, ['_arr','slc'])

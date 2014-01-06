@@ -9,12 +9,12 @@ from traitsui.api import View, Item, ListEditor
 from .util import rep
 
 
-ROISlice = namedtuple('ROISlice', ('xdim', 'ydim', 'slc', 'poly'))
+SlicePoly = namedtuple('SlicePoly', ('slc', 'poly'))
 
 
 class ROI(HasTraits):
     name = String
-    slc = Instance(ROISlice)
+    slicepoly = Instance(SlicePoly)
 
     view = View(Item('name', show_label=False))
 
@@ -27,15 +27,13 @@ class ROI(HasTraits):
         '''
         assert poly.ndim == 2
         assert len(slicer.slc) >= 2
-        self.slc = ROISlice(slicer.xdim, slicer.ydim, slicer.slc, poly)
+        self.slicepoly = SlicePoly(slicer.slc, poly)
 
-    def _dims_to_slice(self, xdim, ydim, slc, rr, cc):
-        slc = list(slc)
-        rrIdx = ydim
-        ccIdx = xdim
-        slc[rrIdx] = rr
-        slc[ccIdx] = cc
-        return slc
+    def _dims_to_slice(self, slc, rr, cc):
+        mslc = list(slc)
+        mslc[slc.ydim] = rr
+        mslc[slc.xdim] = cc
+        return mslc
 
     def to_mask(self, shape):
         '''Convert the polygons to a binary mask according the specified array shape
@@ -47,14 +45,14 @@ class ROI(HasTraits):
         set to false
         '''
         mask = np.zeros(shape)
-        xdim,ydim,slc,poly = self.slc
+        slc,poly = self.slicepoly
         rr,cc = skimage.draw.polygon(poly[:,0], poly[:,1])
-        polyslice = self._dims_to_slice(xdim, ydim, slc, rr, cc)
+        polyslice = self._dims_to_slice(slc, rr, cc)
         mask[polyslice] = 1
         return mask
 
     def __repr__(self):
-        return rep(self, ['name','slc'])
+        return rep(self, ['name','slicepoly'])
 
 
 class ROIManager(HasTraits):

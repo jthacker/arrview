@@ -1,4 +1,5 @@
-from PySide.QtGui import QGraphicsView, QPolygonF, QBrush, QColor
+from PySide.QtGui import (QGraphicsView, QPolygonF, QBrush, 
+        QColor, QMatrix)
 from PySide.QtCore import QPointF
 
 from collections import namedtuple
@@ -195,6 +196,7 @@ class _ROIDisplayTool(GraphicsTool):
         self._polyitems = []
         self.slicer = self.factory.slicer
         self.roiManager = self.factory.roiManager
+        self._matrix = QMatrix(0,1,1,0,0,0)
 
     @on_trait_change('slicer.slc')
     def view_changed(self):
@@ -206,8 +208,8 @@ class _ROIDisplayTool(GraphicsTool):
 
     def add_new_rois(self, rois):
         for roi in rois:
-            x,y,slc,arr = roi.slc
-            self._polys[roi] = QPolygonF([QPointF(a[1],a[0]) for a in arr])
+            slc,poly = roi.slicepoly
+            self._polys[roi] = QPolygonF([QPointF(a[1],a[0]) for a in poly])
         self._update_display()
 
     @on_trait_change('roiManager:rois[]')
@@ -218,22 +220,28 @@ class _ROIDisplayTool(GraphicsTool):
         oldRois = prev - curr
         for roi in oldRois:
             del self._polys[roi]
-
         self.add_new_rois(newRois)
     
-    def _isvisible(self, roi):
-        return self.slicer.slc == roi.slc.slc
+    def _isvisible(self, rslc):
+        slc = self.slicer.slc
+        return rslc == slc or \
+            rslc.is_transposed_view_of(slc)
 
     def _update_display(self):
+        scene = self.graphics.scene()
         for polyitem in self._polyitems:
-            self.graphics.scene().removeItem(polyitem)
+            scene.removeItem(polyitem)
         self._polyitems = []
-
-        for roislice,poly in self._polys.items(): 
-            if self._isvisible(roislice):
-                polyitem = self.graphics.scene().addPolygon(poly,
-                    settings.default_roi_pen(False), QBrush(QColor(255,255,255,80)))
+        for roi,poly in self._polys.items():
+            slc = roi.slicepoly.slc
+            if self._isvisible(slc):
+                if slc.is_transposed_view_of(self.slicer.slc):
+                    poly = self._matrix.map(poly)
+                polyitem = scene.addPolygon(poly,
+                    settings.default_roi_pen(False), 
+                    QBrush(QColor(255,255,255,80)))
                 self._polyitems.append(polyitem)
+
 
 
 class ROIDisplayTool(GraphicsToolFactory):
@@ -256,9 +264,9 @@ class _CursorInfoTool(GraphicsTool):
 
     @on_trait_change('slicer:view')
     def update(self):
-        x,y = self.mouse.coords if self.mouse else (0,0)
+        x,y = self.mouse.coords
         slc = list(self.slicer.slc)
-        xDim,yDim = self.slicer.xdim,self.slicer.ydim
+        xDim,yDim = self.slicer.slc.viewdims
         slc[xDim], slc[yDim] = x,y
         
         view = self.slicer.view

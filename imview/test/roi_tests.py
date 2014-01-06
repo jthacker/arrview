@@ -3,7 +3,7 @@ from numpy.testing import assert_array_equal
 from traits.testing.unittest_tools import unittest
 from traits.testing.api import UnittestTools
 
-from ..roi import ROI, ROIManager, ROISlice
+from ..roi import ROI, ROIManager, SlicePoly
 from ..slicer import Slicer
 
 class TestROI(unittest.TestCase, UnittestTools):
@@ -47,11 +47,11 @@ class TestROI(unittest.TestCase, UnittestTools):
     def test_poly_changed(self):
         roi = ROI(name='test')
         slicer = Slicer(np.zeros((2,2,2)))
-        with self.assertTraitChanges(roi, 'slc') as result:
+        with self.assertTraitChanges(roi, 'slicepoly') as result:
             roi.set_poly(slicer, self.sqrPoly)
        
-        roislice = ROISlice(slicer.xdim, slicer.ydim, slicer.slc, self.sqrPoly)
-        expected = [(roi, 'slc', None, roislice)]
+        slicepoly = SlicePoly(slicer.slc, self.sqrPoly)
+        expected = [(roi, 'slicepoly', None, slicepoly)]
         self.assertSequenceEqual(result.events, expected)
 
     def test_mask_transpose_when_swapping_view_dims(self):
@@ -65,7 +65,7 @@ class TestROI(unittest.TestCase, UnittestTools):
         assert_array_equal(expectedMask, roi.to_mask(slicer.shape))
        
         # Swap the slicer dimensions, should transpose mask
-        slicer.set_viewdims(slicer.ydim, slicer.xdim)
+        slicer.set_viewdims(slicer.slc.ydim, slicer.slc.xdim)
         roi = ROI(name='test')
         roi.set_poly(slicer, poly)
         assert_array_equal(expectedMask.T, roi.to_mask(slicer.shape))
