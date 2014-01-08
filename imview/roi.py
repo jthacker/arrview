@@ -107,11 +107,6 @@ class ROIManager(HasTraits):
     copy = Button
     delete = Button
     
-    save = Button
-    roiSaveFile = File
-    load = Button
-    roiLoadFile = File
-
     view = View(
         HGroup(
             Item('delete',
@@ -122,11 +117,6 @@ class ROIManager(HasTraits):
                 show_label=False),
             Item('replicate',
                 enabled_when='len(selected) > 0',
-                show_label=False),
-            Item('save',
-                enabled_when='len(rois) > 0',
-                show_label=False),
-            Item('load',
                 show_label=False)),
         Item('rois', 
             editor=roi_editor, 
@@ -143,24 +133,6 @@ class ROIManager(HasTraits):
             poly=poly)
         self.nextID += 1
         return roi
-
-    def _roiLoadFile_default(self):
-        return os.path.join(os.path.abspath('.'))
-
-    def _roiSaveFile_default(self):
-        return os.path.join(os.path.abspath('.'))
-
-    def _save_fired(self):
-        filename = save_file(file_name=self.roiSaveFile)
-        if filename:
-            self.roiSaveFile = filename
-            ROIPersistence.save(self.rois, filename)
-    
-    def _load_fired(self):
-        filename = open_file(file_name=self.roiLoadFile)
-        if filename:
-            self.roiLoadFile = filename
-            self.rois.extend(ROIPersistence.load(filename, self.slicer))
 
     def update_roi(self, roi, slc, poly):
         idx = self.rois.index(roi)

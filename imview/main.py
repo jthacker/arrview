@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 from traits.api import *
 from traitsui.api import *
-from traitsui.menu import StandardMenuBar
+from traitsui.menu import Menu, Action, MenuBar
+
+import os
 
 from .slicer import Slicer
-from .roi import ROIManager 
+from .roi import ROIManager, ROIPersistence 
 from .colormapper import ColorMapper
+from .file_dialog import open_file, save_file
 
 from .ui.slicereditor import PixmapEditor
 from .ui.dimeditor import SlicerDims
@@ -97,11 +100,37 @@ class ImageViewer(HasTraits):
             statusbar = [
                 StatusItem(name='cursorInfo'),
                 StatusItem(name='colormapInfo')],
-            #menubar = StandardMenuBar,
-            resizable=True)
+            menubar = MenuBar(
+                Menu(
+                    Action(name='Save', action='_save_rois'),
+                    Action(name='Load', action='_load_rois'),
+                    name='File')),
+            resizable=True,
+            handler=ImageViewerHandler())
 
     def _get_pixmap(self):
         return self.bottomPanel.cmap.array_to_pixmap(self.slicer.view)
+
+
+class ImageViewerHandler(Controller):
+    loadSaveFile = File
+
+    def _loadSaveFile_default(self):
+        return os.path.join(os.path.abspath('.'))
+
+    def _save_rois(self, info):
+        filename = save_file(file_name=self.loadSaveFile)
+        if filename:
+            self.loadSaveFile = filename
+            ROIPersistence.save(info.object.roiManager.rois, filename)
+
+    def _load_rois(self, info):
+        filename = open_file(file_name=self.loadSaveFile)
+        if filename:
+            self.loadSaveFile = filename
+            rois = ROIPersistence.load(filename, info.object.slicer)
+            info.object.roiManager.rois.extend(rois)
+
 
 
 if __name__ == '__main__':
