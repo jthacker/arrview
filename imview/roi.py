@@ -1,16 +1,20 @@
 import skimage.draw
 import numpy as np
 from collections import namedtuple
+import os
+import pickle
 
 from traits.api import (HasTraits, HasPrivateTraits, List, Instance, Property,
-    Any, String, Int, Event, Button, DelegatesTo, WeakRef, Array,
+    Any, String, Int, Event, Button, DelegatesTo, WeakRef, Array, File,
     on_trait_change, cached_property)
 from traitsui.api import View, Item, HGroup, TableEditor
+from traitsui.menu import OKCancelButtons
 from traitsui.table_column import ObjectColumn
 
 from .util import rep
 from .slicer import Slicer, SliceTuple
 from .ui.dimeditor import SlicerDims
+from .file_dialog import save_file, open_file
 
 
 def _dims_to_slice(shape, slc, rr, cc):
@@ -89,7 +93,7 @@ roi_editor = TableEditor(
         ObjectColumn(name='std', format='%0.3g', editable=False),
         ObjectColumn(name='count', format='%d', editable=False)])
 
-
+    
 class ROIManager(HasTraits):
     slicer = Instance(Slicer)
     rois = List(ROI, [])
@@ -101,6 +105,11 @@ class ROIManager(HasTraits):
     replicate = Button
     copy = Button
     delete = Button
+    
+    save = Button
+    roiSaveFile = File
+    load = Button
+    roiLoadFile = File
 
     view = View(
         HGroup(
@@ -112,6 +121,11 @@ class ROIManager(HasTraits):
                 show_label=False),
             Item('replicate',
                 enabled_when='len(selected) > 0',
+                show_label=False),
+            Item('save',
+                enabled_when='len(rois) > 0',
+                show_label=False),
+            Item('load',
                 show_label=False)),
         Item('rois', 
             editor=roi_editor, 
@@ -128,6 +142,31 @@ class ROIManager(HasTraits):
             poly=poly)
         self.nextID += 1
         return roi
+
+    def _roiLoadFile_default(self):
+        return os.path.join(os.path.abspath('.'))
+
+    def _roiSaveFile_default(self):
+        return os.path.join(os.path.abspath('.'))
+
+    def _save_fired(self):
+        self.roiSaveFile = save_file(file_name=self.roiSaveFile)
+        if self.roiSaveFile:
+            rois = []
+            for roi in self.rois:
+                rois.append((roi.name, roi.slc, roi.poly))
+            with open(self.roiSaveFile, 'wb') as f:
+                pickle.dump(rois, f)
+
+    def _load_fired(self):
+        self.roiLoadFile = open_file(file_name=self.roiLoadFile)
+        if self.roiLoadFile:
+            with open(self.roiLoadFile, 'rb') as f:
+                self.rois.extend([
+                    ROI(name=name,
+                        slc=slc,
+                        poly=poly,
+                        slicer=self.slicer) for name,slc,poly in pickle.load(f)])
 
     def update_roi(self, roi, slc, poly):
         idx = self.rois.index(roi)
@@ -152,8 +191,9 @@ class ROIManager(HasTraits):
         dim,dimVal = self.freedim.dim, self.freedim.val
         dimMax = self.slicer.shape[dim]
         for roi in self.selected:
-            if dim in roi.slc.freedims:
-                for i in set(range(dimMax)) - set([dimVal]):
+            slc = roi.slc
+            if dim in slc.freedims:
+                for i in set(range(dimMax)) - set([slc[dim]]):
                     slc = list(roi.slc)
                     slc[dim] = i
                     slc = SliceTuple(slc)
