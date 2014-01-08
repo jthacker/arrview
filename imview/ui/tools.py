@@ -1,10 +1,11 @@
 from PySide.QtGui import (QGraphicsView, QPolygonF, QBrush, 
-        QColor, QMatrix)
-from PySide.QtCore import QPointF
+        QColor, QMatrix, QGraphicsItem, QGraphicsPolygonItem)
+from PySide.QtCore import QPointF, Qt
 
 from collections import namedtuple
 from traits.api import (HasTraits, Instance, Float, Str, WeakRef,
-        Any, Int, Tuple, Event, Property, Callable, on_trait_change)
+    Any, Int, Tuple, List, Bool, Event, Enum,
+    Property, Callable, on_trait_change)
 
 import numpy as np
 import math
@@ -20,15 +21,27 @@ from ..colormapper import ColorMapper
 
 class MouseButtons(object):
     def __init__(self, left=False, middle=False, right=False):
-        self.left = left
-        self.middle = middle
-        self.right = right
+        self._left = left
+        self._middle = middle
+        self._right = right
+
+    @property 
+    def left(self):
+        return self._left and not(self._right or self._middle)
+
+    @property
+    def right(self):
+        return self._right and not(self._left or self._middle)
+
+    @property
+    def middle(self):
+        return self._middle and not(self._left or self._right)
 
     def all(self):
-        return self.left and self.middle and self.right
+        return self._left and self._middle and self._right
 
     def none(self):
-        return not (self.left or self.middle or self.right)
+        return not (self._left or self._middle or self._right)
 
     def __repr__(self):
         return rep(self, ['left','middle','right'])
@@ -50,7 +63,6 @@ class MouseState(HasTraits):
         return rep(self, ['coords','screenCoords', 'delta', 'buttons'])
 
 
-
 class GraphicsTool(HasTraits):
     '''Only use dynamic notifications in the _init method when setting
     up listeners. This has to be done because the class isn't fully
@@ -59,7 +71,7 @@ class GraphicsTool(HasTraits):
 
     name = Str('DEFAULT_NAME')
     mouse = Instance(MouseState)
-    factory = Instance('GraphicsToolFactory')
+    factory = WeakRef('GraphicsToolFactory')
 
     def __init__(self, factory, graphics, mouse):
         super(GraphicsTool, self).__init__(mouse=mouse, factory=factory)
@@ -75,9 +87,6 @@ class GraphicsTool(HasTraits):
         pass
 
     def destroy(self):
-        self._destroy()
-
-    def _destroy(self):
         pass
 
     def mouse_pressed(self):
@@ -94,6 +103,9 @@ class GraphicsTool(HasTraits):
 
     def mouse_double_clicked(self):
         pass
+
+    def __del__(self):
+        print(self)
 
 
 class GraphicsToolFactory(HasTraits):
@@ -135,7 +147,6 @@ def _close_polygon(start, end):
 
 class _ROIDrawTool(GraphicsTool):
     name = 'Draw ROI'
-    slicer = Instance(Slicer)
     roiManager = Instance(ROIManager)
 
     def init(self):
@@ -143,8 +154,10 @@ class _ROIDrawTool(GraphicsTool):
         self._points = []
         self._polyItem = self.graphics.scene().addPolygon(QPolygonF(),
                 settings.default_roi_pen(), settings.default_roi_brush())
-        self.slicer = self.factory.slicer
         self.roiManager = self.factory.roiManager
+
+    def destroy(self):
+        self.graphics.scene().removeItem(self._polyItem)
 
     def mouse_pressed(self):
         if self.mouse.buttons.left:
@@ -158,7 +171,7 @@ class _ROIDrawTool(GraphicsTool):
                 self._points.extend(closedPts)
                 self._polyItem.setPolygon(QPolygonF())
                 poly = np.array([(p.y(),p.x()) for p in self._points])
-                self.roiManager.new(self.slicer, poly)
+                self.roiManager.new(poly)
 
     def mouse_moved(self):
         x,y = self.mouse.coords
@@ -182,23 +195,75 @@ class _ROIDrawTool(GraphicsTool):
 
 class ROIDrawTool(GraphicsToolFactory):
     klass = _ROIDrawTool
-    slicer = Instance(Slicer)
     roiManager = Instance(ROIManager)
+
+ 
+class PenBrushState(object):
+    def __init__(self, pen, brush):
+        self.pen = pen
+        self.brush = brush
+
+    def config_painter(self, painter):
+        painter.setPen(self.pen)
+        painter.setBrush(self.brush)
+        return painter
+
+class HighlightingGraphicsPolygonItem(QGraphicsPolygonItem):
+    _statedict =  {
+        'normal'   : PenBrushState(settings.default_roi_pen(False),
+                                   settings.default_roi_brush()),
+        'highlight': PenBrushState(settings.default_roi_pen(True,color=Qt.red),
+                                   settings.default_roi_brush()),
+        'selected' : PenBrushState(settings.default_roi_pen(True),
+                                   settings.default_roi_brush(alpha=100)),
+        }
+    def __init__(self, polygon, hover=False):
+        super(HighlightingGraphicsPolygonItem, self).__init__(polygon)
+        self.setAcceptHoverEvents(True)
+        self._hover = hover
+        self._state = 'normal'
+        self._prevstate = 'normal'
+        self.state = 'normal'
+
+    @property
+    def state(self):
+        return self._state
+
+    @state.setter
+    def state(self, state):
+        self._prevstate = self._state
+        self._state = state
+        self.update()
+
+    def hoverEnterEvent(self, ev):
+        if self._hover:
+            self.state = 'highlight'
+
+    def hoverLeaveEvent(self, ev):
+        if self._hover:
+            self.state = self._prevstate
+
+    def paint(self, painter, option, widget):
+        painter = self._statedict[self.state].config_painter(painter)
+        painter.drawPolygon(self.polygon())
 
 
 class _ROIDisplayTool(GraphicsTool):
     name = 'ROI Display'
-    slicer = Instance(Slicer)
     roiManager = Instance(ROIManager)
+    movable = Bool(False)
     
     def init(self):
         self._polys = {}
-        self._polyitems = []
-        self.slicer = self.factory.slicer
+        self._polyItems = {}
         self.roiManager = self.factory.roiManager
         self._matrix = QMatrix(0,1,1,0,0,0)
 
-    @on_trait_change('slicer.slc')
+    def destroy(self):
+        self._polys = {}
+        self._update_display()
+
+    @on_trait_change('roiManager.slicer.slc')
     def view_changed(self):
         self._update_display()
 
@@ -208,8 +273,7 @@ class _ROIDisplayTool(GraphicsTool):
 
     def add_new_rois(self, rois):
         for roi in rois:
-            slc,poly = roi.slicepoly
-            self._polys[roi] = QPolygonF([QPointF(a[1],a[0]) for a in poly])
+            self._polys[roi] = QPolygonF([QPointF(y,x) for x,y in roi.poly])
         self._update_display()
 
     @on_trait_change('roiManager:rois[]')
@@ -218,35 +282,113 @@ class _ROIDisplayTool(GraphicsTool):
         curr = set(curr if curr else [])
         newRois = curr - prev
         oldRois = prev - curr
+
         for roi in oldRois:
             del self._polys[roi]
         self.add_new_rois(newRois)
-    
+
+    @on_trait_change('roiManager:selected[]')
+    def roi_selection_changed(self):
+        self._update_display()
+
+    def roi_under_mouse(self):
+        for roi,polyItem in self._polyItems.iteritems():
+            if polyItem.isUnderMouse():
+                return (roi, polyItem)
+        return (None,None)
+   
     def _isvisible(self, rslc):
-        slc = self.slicer.slc
+        slc = self.roiManager.slicer.slc
         return rslc == slc or \
             rslc.is_transposed_view_of(slc)
 
+    def _create_polyitem(self, poly):
+        return HighlightingGraphicsPolygonItem(poly,hover=False)
+
     def _update_display(self):
         scene = self.graphics.scene()
-        for polyitem in self._polyitems:
+        for polyitem in self._polyItems.itervalues():
             scene.removeItem(polyitem)
-        self._polyitems = []
+        self._polyItems = {}
         for roi,poly in self._polys.items():
-            slc = roi.slicepoly.slc
-            if self._isvisible(slc):
-                if slc.is_transposed_view_of(self.slicer.slc):
+            if self._isvisible(roi.slc):
+                if roi.slc.is_transposed_view_of(self.roiManager.slicer.slc):
                     poly = self._matrix.map(poly)
-                polyitem = scene.addPolygon(poly,
-                    settings.default_roi_pen(False), 
-                    QBrush(QColor(255,255,255,80)))
-                self._polyitems.append(polyitem)
-
+                polyitem = self._create_polyitem(poly)
+                if roi in self.roiManager.selected:
+                    polyitem.state = 'selected'
+                scene.addItem(polyitem)
+                self._polyItems[roi] = polyitem
 
 
 class ROIDisplayTool(GraphicsToolFactory):
     klass = _ROIDisplayTool
-    slicer = Instance(Slicer)
+    roiManager = Instance(ROIManager)
+
+class _ROISelectionTool(GraphicsTool):
+    def mouse_pressed(self):
+        if self.mouse.buttons.left:
+            roi,poly = self.roi_under_mouse()
+            if roi is not None:
+                self.roiManager.selected += roi
+
+
+class _ROIEditTool(_ROIDisplayTool):
+    def init(self):
+        super(_ROIEditTool, self).init()
+        self._selectedROI = None
+        self._origin = None
+        self._translation = (0,0)
+        self._movingPolyItem = None
+
+    def destroy(self):
+        super(_ROIEditTool, self).destroy()
+        if self._movingPolyItem:
+            self.graphics.scene().removeItem(self._movingPolyItem)
+            self._movingPolyItem = None
+
+    def _create_polyitem(self, poly):
+        return HighlightingGraphicsPolygonItem(poly,hover=True)
+
+    def mouse_pressed(self):
+        if self.mouse.buttons.left:
+            roi,polyItem = self.roi_under_mouse()
+            if roi is not None:
+                self._selectedROI = roi
+                self._origin = self.mouse.coords
+                poly = self._polys[roi]
+                self._movingPolyItem = self.graphics.scene().addPolygon(poly,
+                    settings.default_roi_pen(True, Qt.red))
+                self._snappingPolyItem = polyItem
+
+    def mouse_moved(self):
+        if self.mouse.buttons.left and self._selectedROI:
+            x,y = self.mouse.coords
+            ox,oy = self._origin
+            dx,dy = x-ox,y-oy
+            self._movingPolyItem.setPos(dx,dy)
+            dx,dy = round(dx),round(dy)
+            self._snappingPolyItem.setPos(dx,dy)
+            # Translation is used on the polygon stored in the roi
+            # which has transposed axes relative to the graphics
+            self._translation = (dy,dx)
+        elif self.mouse.buttons.none:
+            roi,polyItem = self.roi_under_mouse()
+
+    def mouse_released(self):
+        if self._selectedROI:
+            self.graphics.scene().removeItem(self._movingPolyItem)
+            self._movingPolyItem = None
+            slc,poly = self._selectedROI.slc, self._selectedROI.poly
+            poly += np.array(self._translation)
+            self.roiManager.update_roi(self._selectedROI, slc, poly)
+        self._origin = None
+        self._selectedROI = None
+        self._translation = (0,0)
+
+
+class ROIEditTool(GraphicsToolFactory):
+    klass = _ROIEditTool
     roiManager = Instance(ROIManager)
 
 
@@ -291,14 +433,37 @@ class _PanTool(GraphicsTool):
     name = 'Pan'
 
     def init(self):
-        self.graphics.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.origin = None
+        self.prevCursor = None
+        button = self.factory.button
+        self.buttonTest = lambda mouse: getattr(mouse.buttons, button)
 
-    def _destroy(self):
-        self.graphics.setDragMode(QGraphicsView.NoDrag)
+    def mouse_pressed(self):
+        if self.buttonTest(self.mouse):
+            self.origin = self.mouse.screenCoords
+            self.prevCursor = self.graphics.cursor()
+            self.graphics.setCursor(Qt.ClosedHandCursor)
+    
+    def mouse_moved(self):
+        if self.buttonTest(self.mouse):
+            vBar = self.graphics.verticalScrollBar()
+            hBar = self.graphics.horizontalScrollBar();
+            ox,oy = self.origin
+            x,y = self.mouse.screenCoords
+            dx,dy = x-ox,y-oy
+            hBar.setValue(hBar.value() - dx)
+            vBar.setValue(vBar.value() - dy)
+            self.origin = (x,y)
+
+    def mouse_released(self):
+        if self.origin:
+            self.graphics.setCursor(self.prevCursor)
+            self.origin = None
 
 
 class PanTool(GraphicsToolFactory):
     klass = _PanTool
+    button = Enum('left','middle','right')
 
 
 class _ZoomTool(GraphicsTool):
@@ -371,3 +536,19 @@ class ColorMapTool(GraphicsToolFactory):
     slicer = Instance(Slicer)
     colorMapper = Instance(ColorMapper)
     callback = Callable
+
+
+class ToolSet(HasTraits):
+    factories = List(GraphicsToolFactory)
+
+    def __init__(self, **traits):
+        super(ToolSet, self).__init__(**traits)
+        self._tools = []
+
+    @property
+    def tools(self):
+        return self._tools
+
+    def init_tools(self, graphics, mouse):
+        return [t.init_tool(graphics, mouse) for t in self.factories]
+

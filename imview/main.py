@@ -8,8 +8,8 @@ from .colormapper import ColorMapper
 
 from .ui.slicereditor import PixmapEditor
 from .ui.dimeditor import SlicerDims
-from .ui.tools import (CursorInfoTool, PanTool, ZoomTool, 
-        ROIDrawTool, ROIDisplayTool, ColorMapTool)
+from .ui.tools import (ToolSet, CursorInfoTool, PanTool, ZoomTool, 
+        ROIDrawTool, ROIDisplayTool, ROIEditTool, ColorMapTool)
 
 class BottomPanel(HasTraits):
     slicerDims = Instance(SlicerDims)
@@ -21,20 +21,54 @@ class BottomPanel(HasTraits):
 
 class ImageViewer(HasTraits):
     slicer = Instance(Slicer)
-    pixmap = Property(depends_on=['bottomPanel.cmap.+','bottomPanel.cmap.norm.+', 'slicer.view'])
+    pixmap = Property(depends_on=['bottomPanel.cmap.+',
+        'bottomPanel.cmap.norm.+', 'slicer.view'])
     bottomPanel = Instance(BottomPanel)
-
-    roiManager = Instance(ROIManager, ROIManager)
+    mode = Enum('pan','draw','move')
+    roiManager = Instance(ROIManager)
 
     cursorInfo = Str
     colormapInfo = Str
 
+    toolSet = Instance(ToolSet)
+
     def __init__(self, arr):
         super(ImageViewer, self).__init__()
         self.slicer = Slicer(arr)
-        self.bottomPanel = BottomPanel(slicerDims=SlicerDims(self.slicer),
+        slicerDims = SlicerDims(self.slicer)
+        self.roiManager = ROIManager(
+                slicer=self.slicer,
+                slicerDims=slicerDims)
+        self.bottomPanel = BottomPanel(
+                slicerDims=slicerDims,
                 cmap=ColorMapper(slicer=self.slicer))
         self.bottomPanel.cmap.norm.set_scale(arr)
+
+        self._defaultFactories = [
+            CursorInfoTool(
+                slicer=self.slicer,
+                callback=self.update_cursorinfo),
+            ColorMapTool(
+                slicer=self.slicer,
+                colorMapper=self.bottomPanel.cmap,
+                callback=self.update_colormapinfo),
+            PanTool(button='middle'),
+            ZoomTool()]
+
+        self._factoryMap = { 
+            'pan' : [PanTool(button='left'), 
+                        ROIDisplayTool(roiManager=self.roiManager)],
+            'draw': [ROIDrawTool(roiManager=self.roiManager),
+                        ROIDisplayTool(roiManager=self.roiManager)],
+            'move': [ROIEditTool(roiManager=self.roiManager)],
+            }
+
+        self.toolSet = ToolSet()
+        self.mode_changed()
+
+    @on_trait_change('mode')
+    def mode_changed(self):
+        self.toolSet.factories = self._defaultFactories + self._factoryMap[self.mode]
 
     def update_cursorinfo(self, msg):
         self.cursorInfo = msg
@@ -43,37 +77,26 @@ class ImageViewer(HasTraits):
         self.colormapInfo = msg
   
     def default_traits_view(self):
-        tools = [
-            CursorInfoTool(
-                slicer=self.slicer,
-                callback=self.update_cursorinfo),
-            ColorMapTool(
-                slicer=self.slicer,
-                colorMapper=self.bottomPanel.cmap,
-                callback=self.update_colormapinfo),
-            ROIDrawTool(
-                slicer=self.slicer, 
-                roiManager=self.roiManager),
-            ROIDisplayTool(
-                slicer=self.slicer, 
-                roiManager=self.roiManager),
-            #PanTool(),
-            ZoomTool()]
-
         return View(
-                VSplit(
-                    HSplit(
-                        Item('pixmap', 
-                            editor=PixmapEditor(tools=tools),
-                            show_label=False),
-                        Item('roiManager', style='custom', show_label=False,
-                            width=0)),
-                    Item('bottomPanel', style='custom', show_label=False,
-                        height=50)),
-                statusbar = [
-                    StatusItem(name='cursorInfo'),
-                    StatusItem(name='colormapInfo')],
-                resizable=True)
+            VSplit(
+                HSplit(
+                    Item('pixmap', 
+                        editor=PixmapEditor(toolSet=self.toolSet),
+                        show_label=False,
+                        width=0.9),
+                    Group(
+                        HGroup(
+                            Item('mode', style='custom',springy=False),
+                            Item(),
+                            show_labels=False),
+                        Item('roiManager', style='custom'),
+                        show_labels=False)),
+                Item('bottomPanel', style='custom', show_label=False,
+                    height=50)),
+            statusbar = [
+                StatusItem(name='cursorInfo'),
+                StatusItem(name='colormapInfo')],
+            resizable=True)
 
     def _get_pixmap(self):
         return self.bottomPanel.cmap.array_to_pixmap(self.slicer.view)

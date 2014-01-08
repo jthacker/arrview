@@ -7,7 +7,7 @@ from traits.api import (Instance, HasTraits, Int, WeakRef,
 from traitsui.qt4.editor import Editor
 from traitsui.qt4.basic_editor_factory import BasicEditorFactory
 
-from .tools import GraphicsTool, GraphicsToolFactory, MouseState, MouseButtons
+from .tools import ToolSet, MouseState, MouseButtons
 
 class ArrayGraphicsView(QGraphicsView):
     '''ArrayGraphicsView is used for viewing a numpy array.
@@ -80,7 +80,7 @@ class ArrayGraphicsView(QGraphicsView):
 
 class _PixmapEditor(Editor):
     mouse = Instance(MouseState, MouseState)
-    tools = List(GraphicsTool, [])
+    toolSet = Instance(ToolSet)
 
     def init(self, parent):
         self.control = ArrayGraphicsView()
@@ -91,7 +91,16 @@ class _PixmapEditor(Editor):
         self.control.mousedoubleclicked.connect(self._mouse_double_clicked)
         self.control.setPixmap(self.value)
         self.control.fitView()
-        self.tools = self.factory.init_tools(self.control, self.mouse)
+        self._tools = []
+        self.toolSet = self.factory.toolSet
+
+    @on_trait_change('toolSet.factories')
+    def factories_changed(self):
+        for tool in self._tools:
+            tool.destroy()
+        self.mouse = MouseState()
+        self._tools = self.toolSet.init_tools(self.control, self.mouse)
+        print('factory_changed')
 
     def update_editor(self):
         self.control.setPixmap(self.value)
@@ -99,10 +108,10 @@ class _PixmapEditor(Editor):
     def _config_mouse(self, ev):
         self.mouse.coords = self.control.mouseevent_to_item_coords(ev)
         self.mouse.screenCoords = (ev.pos().x(), ev.pos().y())
-        buttons = MouseButtons()
-        buttons.left = ev.buttons() & Qt.LeftButton
-        buttons.middle = ev.buttons() & Qt.MiddleButton
-        buttons.right = ev.buttons() & Qt.RightButton
+        buttons = MouseButtons(
+            left    = ev.buttons() & Qt.LeftButton,
+            middle  = ev.buttons() & Qt.MiddleButton,
+            right   = ev.buttons() & Qt.RightButton)
         self.mouse.buttons = buttons
 
     def _mouse_moved(self, ev):
@@ -129,7 +138,4 @@ class _PixmapEditor(Editor):
 
 class PixmapEditor(BasicEditorFactory):
     klass = _PixmapEditor
-    tools = List(GraphicsToolFactory, [])
-
-    def init_tools(self, graphics, mouse):
-        return [t.init_tool(graphics, mouse) for t in self.tools]
+    toolSet = Instance(ToolSet)
