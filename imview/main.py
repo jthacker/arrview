@@ -1,9 +1,11 @@
 #!/usr/bin/env python
+import os
+os.environ['ETS_TOOLKIT'] = 'qt4'
+
 from traits.api import *
 from traitsui.api import *
 from traitsui.menu import Menu, Action, MenuBar
 
-import os
 
 from .slicer import Slicer
 from .roi import ROIManager, ROIPersistence 
@@ -21,7 +23,8 @@ class BottomPanel(HasTraits):
 
     view = View(
             Item('slicerDims', style='custom', show_label=False),
-            Item('cmap', style='custom', show_label=False))
+            #Item('cmap', style='custom', show_label=False),
+            )
 
 class ImageViewer(HasTraits):
     slicer = Instance(Slicer)
@@ -96,7 +99,7 @@ class ImageViewer(HasTraits):
                         Item('roiManager', style='custom'),
                         show_labels=False)),
                 Item('bottomPanel', style='custom', show_label=False,
-                    height=50)),
+                    height=1)),
             statusbar = [
                 StatusItem(name='cursorInfo'),
                 StatusItem(name='colormapInfo')],
