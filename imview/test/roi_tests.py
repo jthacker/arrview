@@ -14,25 +14,25 @@ class TestROI(unittest.TestCase, UnittestTools):
     def test_mask(self):
         arr = np.zeros((3,3,3))
         slicer = Slicer(arr)
-        roi = ROI(slc=slicer.slc, poly=self.sqrPoly)
+        roi = ROI(slc=slicer.slc, poly=self.sqrPoly, slicer=slicer)
 
         mask = np.ones(slicer.shape)
         mask[:1,:1,0] = 0
         expected = np.ma.array(arr, mask=mask)
 
-        assert_array_equal(expected, roi.mask(arr))
+        assert_array_equal(expected, roi.masked(arr))
 
     def test_maskdifferent_freedim(self):
         arr = np.zeros((3,3,3))
         slicer = Slicer(arr)
         slicer.set_freedim(2,1)
-        roi = ROI(slc=slicer.slc, poly=self.sqrPoly)
+        roi = ROI(slc=slicer.slc, poly=self.sqrPoly, slicer=slicer)
 
         mask = np.ones(slicer.shape)
         mask[:1,:1,1] = 0
         expected = np.ma.array(arr, mask=mask)
 
-        assert_array_equal(expected, roi.mask(arr))
+        assert_array_equal(expected, roi.masked(arr))
 
     def test_coordinate_order(self):
         '''The specified coordinates should be (row1,col1), (row2,col2), ...
@@ -41,36 +41,37 @@ class TestROI(unittest.TestCase, UnittestTools):
         arr = np.zeros((3,3))
         slicer = Slicer(arr)
 
-        roi = ROI(slc=slicer.slc, poly=poly)
+        roi = ROI(slc=slicer.slc, poly=poly, slicer=slicer)
         mask = np.ones(slicer.shape)
         mask[0,:] = 0
         expected = np.ma.array(arr, mask=mask)
 
-        assert_array_equal(expected, roi.mask(arr))
+        assert_array_equal(expected, roi.masked(arr))
 
     def test_poly_changed(self):
         slicer = Slicer(np.zeros((2,2,2)))
-        roi = ROI(slicer=slicer, slc=slicer.slc, poly=[])
-        with self.assertTraitChanges(roi, 'poly') as result:
-            roi.set(slc=slicer.slc, poly=self.sqrPoly)
-       
-        assert_array_equal(self.sqrPoly, result.event[3])
+        # An invalid division results when calculating std-dev for an
+        with np.errstate(invalid='ignore'):
+            roi = ROI(slicer=slicer, slc=slicer.slc, poly=np.array([]))
+            with self.assertTraitChanges(roi, 'poly') as result:
+                roi.set(slc=slicer.slc, poly=self.sqrPoly)
+            assert_array_equal(self.sqrPoly, result.event[3])
 
     def test_mask_transpose_when_swapping_view_dims(self):
         poly = np.array([(0,0),(0,3),(1,3),(1,0)])
         arr = np.zeros((3,3))
         slicer = Slicer(arr)
 
-        roi = ROI(slc=slicer.slc, poly=poly)
+        roi = ROI(slc=slicer.slc, poly=poly, slicer=slicer)
         mask = np.ones(slicer.shape)
         mask[0,:] = 0
         expected = np.ma.array(arr, mask=mask)
-        assert_array_equal(expected, roi.mask(arr))
+        assert_array_equal(expected, roi.masked(arr))
        
         # Swap the slicer dimensions, should transpose mask
         slicer.set_viewdims(slicer.slc.ydim, slicer.slc.xdim)
-        roi = ROI(slc=slicer.slc, poly=poly)
-        assert_array_equal(expected.T, roi.mask(arr))
+        roi = ROI(slc=slicer.slc, poly=poly, slicer=slicer)
+        assert_array_equal(expected.T, roi.masked(arr))
 
     def test_save_and_load(self):
         arr = np.zeros((3,3))
@@ -121,9 +122,9 @@ class TestROIManager(unittest.TestCase, UnittestTools):
 class Test_ROI_Stats(unittest.TestCase, UnittestTools):
     def setUp(self):
         arr = np.arange(2*3*4).reshape(2,3,4)
-        slicer = Slicer(arr)
+        self.slicer = Slicer(arr)
         poly = np.array([(0,0),(0,2),(2,2),(2,0)])
-        self.roi = ROI(slc=slicer.slc, poly=poly, slicer=slicer)
+        self.roi = ROI(slc=self.slicer.slc, poly=poly, slicer=self.slicer)
 
     def test_mean(self):
         self.assertAlmostEqual(self.roi.mean, 8.0)
@@ -134,3 +135,11 @@ class Test_ROI_Stats(unittest.TestCase, UnittestTools):
     def test_area(self):
         self.assertEqual(self.roi.count, 4)
 
+    def _mean_updated(self):
+        newPoly = np.array([(0,0), (0,3), (3,3), (3,0)])
+        with self.assertTraitChanges(self.roi, 'mean') as result:
+            self.roi.poly = newPoly
+
+        expected = (self.roi, 'mean', 8.0, 0.25)
+        self.assertSequenceEqual(result.events, expected)
+            

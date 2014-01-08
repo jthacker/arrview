@@ -1,7 +1,4 @@
 #!/usr/bin/env python
-import os
-os.environ['ETS_TOOLKIT'] = 'qt4'
-
 from traits.api import *
 from traitsui.api import *
 from traitsui.menu import Menu, Action, MenuBar

@@ -6,7 +6,7 @@ import h5py
 from itertools import izip
 
 from traits.api import (HasTraits, HasPrivateTraits, List, Instance, Property,
-    Any, String, Int, Event, Button, DelegatesTo, WeakRef, Array, File,
+    Any, String, Int, Float, Event, Button, DelegatesTo, WeakRef, Array, File,
     on_trait_change, cached_property)
 from traitsui.api import View, Item, HGroup, TableEditor
 from traitsui.menu import OKCancelButtons
@@ -22,61 +22,68 @@ def _dims_to_slice(shape, slc, rr, cc):
     rdim = slc.ydim
     cdim = slc.xdim
     mslc = list(slc)
-    ridx = np.logical_and(rr >=0, rr < shape[rdim])
-    cidx = np.logical_and(cc >=0, cc < shape[cdim])
-    filtered_indicies = np.logical_and(ridx, cidx)
-    mslc[rdim] = rr[filtered_indicies]
-    mslc[cdim] = cc[filtered_indicies]
+    mslc[rdim] = rr
+    mslc[cdim] = cc
     return mslc
 
-def create_mask(arr, slc, poly):
+def create_mask(shape, slc, poly):
     '''Convert the polygons to a binary mask according the specified array shape
     Args:
     shape -- a tuple with the size of each dimension in the mask
+    poly  -- A numpy array of (x,y) point pairs describing a polygon
+    slc   -- SliceTuple describing where to apply the polygon to
 
     Returns:
-    binary mask with the regions in polys set to true and everywhere else
+    binary mask with the region in poly set to true and everywhere else
     set to false
     '''
-    shape = arr.shape
-    mask = np.ones(shape)
-    rr,cc = skimage.draw.polygon(poly[:,0], poly[:,1])
-    polyslice = _dims_to_slice(shape, slc, rr, cc)
-    mask[polyslice] = False
+    mask = np.ones(shape, dtype=bool)
+
+    if len(poly) > 0: 
+        rr,cc = skimage.draw.polygon(poly[:,0], poly[:,1], shape=shape)
+        polyslice = _dims_to_slice(shape, slc, rr, cc)
+        mask[polyslice] = False
     return mask
 
 
 class ROI(HasTraits):
     name = String
     slicer = Instance(Slicer)
-    
     slc = Instance(SliceTuple)
     poly = Array
 
-    masked = Property(depends_on='[slc,poly]')
-    mean = Property(depends_on='[slc,poly]')
-    std = Property(depends_on='[slc,poly]')
-    count = Property(depends_on='[slc,poly]')
+    mean = Property
+    _mean = Float
+    std = Property
+    _std = Float
+    count = Property
+    _count = Int
 
-    def mask(self, arr):
-        return np.ma.array(data=arr, mask=create_mask(arr, self.slc, self.poly))
+    def __init__(self, **traits):
+        super(ROI, self).__init__(**traits)
+        self.on_trait_change(self.update_stats, ['slc', 'poly'])
+        self.update_stats()
 
-    def _get_masked(self):
+    def masked(self, arr):
+        return np.ma.array(data=arr, mask=create_mask(arr.shape, self.slc, self.poly))
+
+    def update_stats(self):
         view = self.slicer.arr[self.slc.arrayslice] # 2D Array
         slc2D = SliceTuple(self.slc[v] for v in sorted(self.slc.viewdims))
-        return view[create_mask(view, slc2D, self.poly) != True]
+        masked_data = view[create_mask(view.shape, slc2D, self.poly) != True]
 
-    @cached_property
+        self._mean = masked_data.mean()
+        self._std = masked_data.std()
+        self._count = masked_data.size
+
     def _get_mean(self):
-        return self.masked.mean()
+        return self._mean
 
-    @cached_property
     def _get_std(self):
-        return self.masked.std()
+        return self._std
 
-    @cached_property
     def _get_count(self):
-        return self.masked.size
+        return self._count
 
     def __repr__(self):
         return rep(self, ['name','slc','poly','count','mean','std'])
