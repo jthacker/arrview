@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from traits.api import *
 from traitsui.api import *
+from traitsui.menu import StandardMenuBar
 
 from .slicer import Slicer
 from .roi import ROIManager 
@@ -96,6 +97,7 @@ class ImageViewer(HasTraits):
             statusbar = [
                 StatusItem(name='cursorInfo'),
                 StatusItem(name='colormapInfo')],
+            #menubar = StandardMenuBar,
             resizable=True)
 
     def _get_pixmap(self):

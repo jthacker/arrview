@@ -49,8 +49,7 @@ class FreeDim(HasPrivateTraits):
     view = View(
             HGroup(
                 Item('autoInc',
-                    label='Inc'),
-                Item('fps'),
+                    label='Play'),
                 Item('val',
                     editor=RangeEditor(
                         low=0,

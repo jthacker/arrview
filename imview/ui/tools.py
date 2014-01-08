@@ -445,7 +445,7 @@ class _PanTool(GraphicsTool):
             self.graphics.setCursor(Qt.ClosedHandCursor)
     
     def mouse_moved(self):
-        if self.buttonTest(self.mouse):
+        if self.buttonTest(self.mouse) and self.origin:
             vBar = self.graphics.verticalScrollBar()
             hBar = self.graphics.horizontalScrollBar();
             ox,oy = self.origin
@@ -482,6 +482,12 @@ class _ZoomTool(GraphicsTool):
         if lessThanMax or greaterThanMin:
             self.graphics.scale(s,s)
             self.currentScale *= s
+
+    def mouse_double_clicked(self):
+        if self.mouse.buttons.middle:
+            s = 1.0 / self.currentScale
+            self.graphics.scale(s,s)
+            self.currentScale = 1
 
 
 class ZoomTool(GraphicsToolFactory):
