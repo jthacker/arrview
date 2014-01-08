@@ -1,9 +1,10 @@
 import numpy as np
+import tempfile
 from numpy.testing import assert_array_equal
 from traits.testing.unittest_tools import unittest
 from traits.testing.api import UnittestTools
 
-from ..roi import ROI, ROIManager
+from ..roi import ROI, ROIManager, ROIPersistence
 from ..slicer import Slicer
 
 class TestROI(unittest.TestCase, UnittestTools):
@@ -70,6 +71,24 @@ class TestROI(unittest.TestCase, UnittestTools):
         slicer.set_viewdims(slicer.slc.ydim, slicer.slc.xdim)
         roi = ROI(slc=slicer.slc, poly=poly)
         assert_array_equal(expected.T, roi.mask(arr))
+
+    def test_save_and_load(self):
+        arr = np.zeros((3,3))
+        slicer = Slicer(arr)
+        poly = np.array([(0,0),(0,3),(1,3),(1,0)])
+
+        roi = ROI(slc=slicer.slc, poly=poly, slicer=slicer, name='name')
+        _,filename = tempfile.mkstemp()
+
+        ROIPersistence.save([roi], filename)
+        lrois = ROIPersistence.load(filename, slicer)
+
+        self.assertEquals(len(lrois), 1)
+        lroi = lrois[0]
+
+        self.assertEquals(roi.name, lroi.name)
+        self.assertEquals(roi.slc, lroi.slc)
+        assert_array_equal(roi.poly, lroi.poly)
 
 
 class TestROIManager(unittest.TestCase, UnittestTools):

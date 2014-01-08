@@ -2,7 +2,8 @@ import skimage.draw
 import numpy as np
 from collections import namedtuple
 import os
-import pickle
+import h5py
+from itertools import izip
 
 from traits.api import (HasTraits, HasPrivateTraits, List, Instance, Property,
     Any, String, Int, Event, Button, DelegatesTo, WeakRef, Array, File,
@@ -150,23 +151,16 @@ class ROIManager(HasTraits):
         return os.path.join(os.path.abspath('.'))
 
     def _save_fired(self):
-        self.roiSaveFile = save_file(file_name=self.roiSaveFile)
-        if self.roiSaveFile:
-            rois = []
-            for roi in self.rois:
-                rois.append((roi.name, roi.slc, roi.poly))
-            with open(self.roiSaveFile, 'wb') as f:
-                pickle.dump(rois, f)
-
+        filename = save_file(file_name=self.roiSaveFile)
+        if filename:
+            self.roiSaveFile = filename
+            ROIPersistence.save(self.rois, filename)
+    
     def _load_fired(self):
-        self.roiLoadFile = open_file(file_name=self.roiLoadFile)
-        if self.roiLoadFile:
-            with open(self.roiLoadFile, 'rb') as f:
-                self.rois.extend([
-                    ROI(name=name,
-                        slc=slc,
-                        poly=poly,
-                        slicer=self.slicer) for name,slc,poly in pickle.load(f)])
+        filename = open_file(file_name=self.roiLoadFile)
+        if filename:
+            self.roiLoadFile = filename
+            self.rois.extend(ROIPersistence.load(filename, self.slicer))
 
     def update_roi(self, roi, slc, poly):
         idx = self.rois.index(roi)
@@ -199,3 +193,30 @@ class ROIManager(HasTraits):
                     slc = SliceTuple(slc)
                     rois.append(self._new_roi(slc, roi.poly.copy()))
         self.rois.extend(rois)
+
+
+class ROIPersistence(object):
+    @staticmethod
+    def filter_viewdims(slc):
+        viewdims = slc.viewdims
+        return [0 if d in viewdims else v for d,v in enumerate(slc)] 
+
+    @staticmethod
+    def save(rois, filename):
+        with h5py.File(filename, 'w') as f:
+            slices = [roi.slc for roi in rois]
+            f['/rois/names'] = [roi.name for roi in rois]
+            f['/rois/polys'] = [roi.poly for roi in rois]
+            f['/rois/viewdims'] = [slc.viewdims for slc in slices]
+            f['/rois/slices'] = [ROIPersistence.filter_viewdims(slc) for slc in slices]
+
+    @staticmethod
+    def load(filename, slicer):
+        with h5py.File(filename, 'r') as f:
+            names = [str(name) for name in f['/rois/names'].value]
+            polys = f['/rois/polys'].value
+            viewdims = f['/rois/viewdims'].value
+            slices = f['/rois/slices'].value
+            slcs = [SliceTuple.from_arrayslice(slc,vdims) for slc,vdims in izip(slices,viewdims)]
+            return [ROI(name=name, slc=slc,
+                poly=poly, slicer=slicer) for (name,slc,poly) in izip(names,slcs,polys)]

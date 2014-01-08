@@ -6,6 +6,11 @@ from .util import unique, rep
 
 
 class SliceTuple(tuple):
+    def __init__(self, *args, **kwargs):
+        super(SliceTuple, self).__init__(*args, **kwargs)
+        assert 'x' in self, 'Tuple must contain "x"'
+        assert 'y' in self, 'Tuple must contain "y"'
+
     @property
     def xdim(self):
         return self.index('x')
@@ -19,6 +24,24 @@ class SliceTuple(tuple):
         return (self.xdim, self.ydim)
 
     def is_transposed_view_of(self, slc):
+        '''Test if slc is equal to this object but with swapped x and y dims swapped
+        Args:
+        slc -- (SliceTuple)
+
+        Returns:
+        True if slc equals this object with swapped view dimensions, otherwise False.
+
+        Examples:
+        >>> a = SliceTuple(('x','y',0,1))
+        >>> b = SliceTuple(('y','x',0,1))
+        >>> c = SliceTuple(('y','x',0,20))
+        >>> a.is_transposed_view_of(b)
+        True
+        >>> b.is_transposed_view_of(a)
+        True
+        >>> a.is_transposed_view_of(c)
+        False
+        '''
         s = list(self)
         # Swap the axes
         s[self.xdim],s[self.ydim] = s[self.ydim],s[self.xdim]
@@ -33,6 +56,29 @@ class SliceTuple(tuple):
         '''Replace xdim and ydim by slice(None) for indexing an array'''
         viewdims = self.viewdims
         return tuple(slice(None) if d in viewdims else x for d,x in enumerate(self))
+
+    @staticmethod
+    def from_arrayslice(arrslice, viewdims):
+        '''Replace the dims from viedims in arrslice.
+        Args:
+        arrslice -- a tuple used for slicing a numpy array. The method arrayslice
+                    returns examples of this type of array
+        viewdims -- a len 2 tuple with the first position holding the dimension
+                    number that corresponds to the x dimension and the second is
+                    the y dimension.
+        Returns:
+        arrslice with each dim in viewdims replaced by 'x' or 'y'
+
+        For example:
+        >>> arrslice = (0,0,0,0)
+        >>> viewdims = (1,0)
+        >>> from_arrayslice(arrslice, viewdims)
+        ('y','x',0,0)
+        '''
+        slc = list(arrslice)
+        xdim,ydim = viewdims
+        slc[xdim],slc[ydim] = 'x','y'
+        return SliceTuple(slc)
 
 
 class Slicer(HasTraits):
