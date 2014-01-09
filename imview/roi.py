@@ -6,9 +6,10 @@ import h5py
 from itertools import izip
 
 from traits.api import (HasTraits, HasPrivateTraits, List, Instance, Property,
-    Any, String, Int, Float, Event, Button, DelegatesTo, WeakRef, Array, File,
+    Any, Str, Int, Float, Event, Button, DelegatesTo, WeakRef, Array, File,
     on_trait_change, cached_property)
-from traitsui.api import View, Item, HGroup, TableEditor
+from traitsui.api import View, Item, HGroup, TableEditor, TabularEditor
+from traitsui.tabular_adapter import TabularAdapter
 from traitsui.menu import OKCancelButtons
 from traitsui.table_column import ObjectColumn
 
@@ -18,36 +19,27 @@ from .ui.dimeditor import SlicerDims
 from .file_dialog import save_file, open_file
 
 
-def _dims_to_slice(shape, slc, rr, cc):
-    rdim = slc.ydim
-    cdim = slc.xdim
-    mslc = list(slc)
-    mslc[rdim] = rr
-    mslc[cdim] = cc
-    return mslc
-
 def create_mask(shape, slc, poly):
     '''Convert the polygons to a binary mask according the specified array shape
     Args:
     shape -- a tuple with the size of each dimension in the mask
-    poly  -- A numpy array of (x,y) point pairs describing a polygon
     slc   -- SliceTuple describing where to apply the polygon to
+    poly  -- A numpy array of (x,y) point pairs describing a polygon
 
     Returns:
     binary mask with the region in poly set to true and everywhere else
     set to false
     '''
     mask = np.ones(shape, dtype=bool)
-
-    if len(poly) > 0: 
-        rr,cc = skimage.draw.polygon(poly[:,0], poly[:,1], shape=shape)
-        polyslice = _dims_to_slice(shape, slc, rr, cc)
-        mask[polyslice] = False
+    if len(poly) > 0:
+        viewShape = shape[slc.ydim],shape[slc.xdim]
+        y,x = skimage.draw.polygon(y=poly[:,1], x=poly[:,0], shape=viewShape)
+        mask[slc.slice_from_screen_coords(x, y, mask)] = False
     return mask
 
 
 class ROI(HasTraits):
-    name = String
+    name = Str
     slicer = Instance(Slicer)
     slc = Instance(SliceTuple)
     poly = Array
@@ -56,8 +48,8 @@ class ROI(HasTraits):
     _mean = Float
     std = Property
     _std = Float
-    count = Property
-    _count = Int
+    size = Property
+    _size = Int
 
     def __init__(self, **traits):
         super(ROI, self).__init__(**traits)
@@ -68,13 +60,21 @@ class ROI(HasTraits):
         return np.ma.array(data=arr, mask=create_mask(arr.shape, self.slc, self.poly))
 
     def update_stats(self):
-        view = self.slicer.arr[self.slc.arrayslice] # 2D Array
+        shape = self.slicer.shape
+        masked_data = self.slicer.arr[create_mask(shape, self.slc, self.poly) != True]
+        self._mean = masked_data.mean()
+        self._std = masked_data.std()
+        self._size = masked_data.size
+
+    def update_stats_fast(self):
+        view = self.slc.viewarray(self.slicer.arr)
+        # create a 2D SliceTuple
         slc2D = SliceTuple(self.slc[v] for v in sorted(self.slc.viewdims))
         masked_data = view[create_mask(view.shape, slc2D, self.poly) != True]
 
         self._mean = masked_data.mean()
         self._std = masked_data.std()
-        self._count = masked_data.size
+        self._size = masked_data.size
 
     def _get_mean(self):
         return self._mean
@@ -82,14 +82,33 @@ class ROI(HasTraits):
     def _get_std(self):
         return self._std
 
-    def _get_count(self):
-        return self._count
+    def _get_size(self):
+        return self._size
 
     def __repr__(self):
-        return rep(self, ['name','slc','poly','count','mean','std'])
+        return rep(self, ['name','slc','poly','size','mean','std'])
 
 
-roi_editor = TableEditor(
+class ROIAdapter(TabularAdapter):
+    columns = [ ('Name', 'name'),
+                ('Slice', 'slc'),
+                ('Mean', 'mean'),
+                ('Std', 'std'),
+                ('Size', 'size')]
+
+    slc_text = Property
+
+    def _get_slc_text(self):
+        return '[%s]' % ','.join(str(x) for x in self.item.slc)
+
+
+roi_editor = TabularEditor(
+        adapter = ROIAdapter(),
+        operations = [],
+        multi_select = True,
+        selected = 'selected')
+
+_roi_editor = TableEditor(
     sortable = False,
     configurable = False,
     selection_mode = 'rows',
@@ -113,6 +132,7 @@ class ROIManager(HasTraits):
     replicate = Button
     copy = Button
     delete = Button
+    dump = Button
     
     view = View(
         HGroup(
@@ -124,6 +144,8 @@ class ROIManager(HasTraits):
                 show_label=False),
             Item('replicate',
                 enabled_when='len(selected) > 0',
+                show_label=False),
+            Item('dump',
                 show_label=False)),
         Item('rois', 
             editor=roi_editor, 
@@ -131,6 +153,11 @@ class ROIManager(HasTraits):
     
     def new(self, poly):
         self.rois.append(self._new_roi(self.slicer.slc, poly))
+
+
+    def _dump_fired(self):
+        print(self.rois)
+        import ipdb; ipdb.set_trace()
 
     def _new_roi(self, slc, poly):
         roi = ROI(
@@ -192,7 +219,7 @@ class ROIPersistence(object):
     @staticmethod
     def load(filename, slicer):
         with h5py.File(filename, 'r') as f:
-            names = [str(name) for name in f['/rois/names'].value]
+            names = f['/rois/names'].value
             polys = f['/rois/polys'].value
             viewdims = f['/rois/viewdims'].value
             slices = f['/rois/slices'].value

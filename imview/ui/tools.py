@@ -170,7 +170,7 @@ class _ROIDrawTool(GraphicsTool):
                 closedPts = _close_polygon(self._points[-1], self._points[0])
                 self._points.extend(closedPts)
                 self._polyItem.setPolygon(QPolygonF())
-                poly = np.array([(p.y(),p.x()) for p in self._points])
+                poly = np.array([(p.x(),p.y()) for p in self._points])
                 self.roiManager.new(poly)
 
     def mouse_moved(self):
@@ -256,8 +256,9 @@ class _ROIDisplayTool(GraphicsTool):
     def init(self):
         self._polys = {}
         self._polyItems = {}
-        self.roiManager = self.factory.roiManager
         self._matrix = QMatrix(0,1,1,0,0,0)
+        self.roiManager = self.factory.roiManager
+        self.add_new_rois(self.roiManager.rois)
 
     def destroy(self):
         self._polys = {}
@@ -267,13 +268,9 @@ class _ROIDisplayTool(GraphicsTool):
     def view_changed(self):
         self._update_display()
 
-    @on_trait_change('roiManager')
-    def roimanager_updated(self):
-        self.add_new_rois(self.roiManager.rois)
-
     def add_new_rois(self, rois):
         for roi in rois:
-            self._polys[roi] = QPolygonF([QPointF(y,x) for x,y in roi.poly])
+            self._polys[roi] = QPolygonF([QPointF(x,y) for x,y in roi.poly])
         self._update_display()
 
     @on_trait_change('roiManager:rois[]')
@@ -305,6 +302,11 @@ class _ROIDisplayTool(GraphicsTool):
     def _create_polyitem(self, poly):
         return HighlightingGraphicsPolygonItem(poly,hover=False)
 
+    def _map_poly(self, roi, poly):
+        if roi.slc.is_transposed_view_of(self.roiManager.slicer.slc):
+            poly = self._matrix.map(poly)
+        return poly
+
     def _update_display(self):
         scene = self.graphics.scene()
         for polyitem in self._polyItems.itervalues():
@@ -312,9 +314,7 @@ class _ROIDisplayTool(GraphicsTool):
         self._polyItems = {}
         for roi,poly in self._polys.items():
             if self._isvisible(roi.slc):
-                if roi.slc.is_transposed_view_of(self.roiManager.slicer.slc):
-                    poly = self._matrix.map(poly)
-                polyitem = self._create_polyitem(poly)
+                polyitem = self._create_polyitem(self._map_poly(roi, poly))
                 if roi in self.roiManager.selected:
                     polyitem.state = 'selected'
                 scene.addItem(polyitem)
@@ -356,7 +356,7 @@ class _ROIEditTool(_ROIDisplayTool):
             if roi is not None:
                 self._selectedROI = roi
                 self._origin = self.mouse.coords
-                poly = self._polys[roi]
+                poly = self._map_poly(roi, self._polys[roi])
                 self._movingPolyItem = self.graphics.scene().addPolygon(poly,
                     settings.default_roi_pen(True, Qt.red))
                 self._snappingPolyItem = polyItem
@@ -369,18 +369,22 @@ class _ROIEditTool(_ROIDisplayTool):
             self._movingPolyItem.setPos(dx,dy)
             dx,dy = round(dx),round(dy)
             self._snappingPolyItem.setPos(dx,dy)
-            # Translation is used on the polygon stored in the roi
-            # which has transposed axes relative to the graphics
-            self._translation = (dy,dx)
+            self._translation = (dx,dy)
         elif self.mouse.buttons.none:
             roi,polyItem = self.roi_under_mouse()
 
     def mouse_released(self):
         if self._selectedROI:
+            print('mouse_released')
             self.graphics.scene().removeItem(self._movingPolyItem)
             self._movingPolyItem = None
             slc,poly = self._selectedROI.slc, self._selectedROI.poly
-            poly += np.array(self._translation)
+            
+            translation = self._translation
+            if self._selectedROI.slc.is_transposed_view_of(self.roiManager.slicer.slc):
+                translation = self._translation[::-1]
+
+            poly += np.array(translation)
             self.roiManager.update_roi(self._selectedROI, slc, poly)
         self._origin = None
         self._selectedROI = None

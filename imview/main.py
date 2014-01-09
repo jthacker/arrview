@@ -137,9 +137,6 @@ if __name__ == '__main__':
     import numpy as np
     from operator import mul
 
-    s = np.linspace(-1,1,64)
-    z = np.linspace(-1,1,23)
-    [X,Y,T,Z] = np.meshgrid(s,s,s,z)
-    arr = np.cos(2*np.pi*X)*np.sin(2*np.pi*Y)*np.exp(-2*T)+10*Z
+    arr = np.arange(32*64*128).reshape(32,64,128)
     iv = ImageViewer(arr)
     iv.configure_traits()

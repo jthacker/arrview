@@ -8,21 +8,46 @@ from .util import unique, rep
 class SliceTuple(tuple):
     def __init__(self, *args, **kwargs):
         super(SliceTuple, self).__init__(*args, **kwargs)
-        assert 'x' in self, 'Tuple must contain "x"'
-        assert 'y' in self, 'Tuple must contain "y"'
+        self._xdim = self.index('x')
+        self._ydim = self.index('y')
 
     @property
     def xdim(self):
-        return self.index('x')
+        return self._xdim
 
     @property
     def ydim(self):
-        return self.index('y')
+        return self._ydim
    
     @property
     def viewdims(self):
         return (self.xdim, self.ydim)
 
+    @property
+    def is_transposed(self):
+        return self.ydim > self.xdim
+
+    def viewarray(self, arr):
+        '''Transforms arr from Array coordinates to Screen coordinates
+        using the transformation described by this object'''
+        assert arr.ndim == len(self), 'dimensions of arr must equal the length of this object'
+        viewdims = self.viewdims
+        arrayslice = [slice(None) if d in viewdims else x for d,x in enumerate(self)]
+        a = arr[arrayslice]
+        return a.transpose() if self.is_transposed else a
+
+    def screen_coords_to_array_coords(self, x, y):
+        '''Transforms arr of Screen coordinates to Array indicies'''
+        r,c = (y,x) if self.is_transposed else (x,y)
+        return r,c
+
+    def slice_from_screen_coords(self, x, y, arr):
+        slc = list(self)
+        rdim,cdim = self.screen_coords_to_array_coords(*self.viewdims)
+        slc[rdim],slc[cdim] = self.screen_coords_to_array_coords(x,y)
+        return slc
+
+    #TODO: deprecate
     def is_transposed_view_of(self, slc):
         '''Test if slc is equal to this object but with swapped x and y dims swapped
         Args:
@@ -51,12 +76,7 @@ class SliceTuple(tuple):
     def freedims(self):
         return tuple(i for i,x in enumerate(self) if i not in self.viewdims)
 
-    @property
-    def arrayslice(self):
-        '''Replace xdim and ydim by slice(None) for indexing an array'''
-        viewdims = self.viewdims
-        return tuple(slice(None) if d in viewdims else x for d,x in enumerate(self))
-
+    #TODO: Get rid of this method
     @staticmethod
     def from_arrayslice(arrslice, viewdims):
         '''Replace the dims from viedims in arrslice.
@@ -87,6 +107,7 @@ class Slicer(HasTraits):
     shape = Property()
     ndim = Property()
     arr = Property()
+    transposed = Property
 
     def __init__(self, arr, xdim=1, ydim=0):
         '''Wraps a numpy array to keep track of a 2D slice.
@@ -146,12 +167,11 @@ class Slicer(HasTraits):
             slc = list(self.slc)
             slc[dim] = val
             self.slc = SliceTuple(slc)
-    
+
     @cached_property
     def _get_view(self):
         '''Get the current view of the array'''
-        a = self.arr[self.slc.arrayslice]
-        return a.transpose() if self.slc.ydim > self.slc.xdim else a
+        return self.slc.viewarray(self.arr)
 
     def __repr__(self):
         return rep(self, ['arr','slc'])

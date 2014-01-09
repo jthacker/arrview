@@ -80,3 +80,14 @@ class TestSlicer(unittest.TestCase, UnittestTools):
         with self.assertTraitChanges(slicer, 'view') as result:
             slicer.set_freedim(2,1)
         assert_array_equal(arr[:,:,1], slicer.view)
+
+    def test_is_transposed_view(self):
+        arr = np.arange(30).reshape(6,5)
+        slicer = Slicer(arr)
+        slc = slicer.slc
+        slicer.set_viewdims(slc.ydim, slc.xdim)
+        slcT = slicer.slc
+
+        self.assertTrue(slc.is_transposed_view_of(slcT))
+        self.assertTrue(slcT.is_transposed_view_of(slc))
+        self.assertFalse(slc.is_transposed_view_of(slc))

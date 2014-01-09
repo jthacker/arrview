@@ -132,8 +132,8 @@ class Test_ROI_Stats(unittest.TestCase, UnittestTools):
     def test_std(self):
         self.assertAlmostEqual(self.roi.std, 6.324555320336759)
 
-    def test_area(self):
-        self.assertEqual(self.roi.count, 4)
+    def test_size(self):
+        self.assertEqual(self.roi.size, 4)
 
     def _mean_updated(self):
         newPoly = np.array([(0,0), (0,3), (3,3), (3,0)])
