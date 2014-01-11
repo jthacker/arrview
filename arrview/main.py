@@ -23,7 +23,7 @@ class BottomPanel(HasTraits):
             #Item('cmap', style='custom', show_label=False),
             )
 
-class ImageViewer(HasTraits):
+class ArrayViewer(HasTraits):
     slicer = Instance(Slicer)
     pixmap = Property(depends_on=['bottomPanel.cmap.+',
         'bottomPanel.cmap.norm.+', 'slicer.view'])
@@ -36,9 +36,9 @@ class ImageViewer(HasTraits):
 
     toolSet = Instance(ToolSet)
 
-    def __init__(self, arr):
-        super(ImageViewer, self).__init__()
-        self.slicer = Slicer(arr)
+    def __init__(self, slicer):
+        super(ArrayViewer, self).__init__()
+        self.slicer = slicer
         slicerDims = SlicerDims(self.slicer)
         self.roiManager = ROIManager(
                 slicer=self.slicer,
@@ -46,7 +46,7 @@ class ImageViewer(HasTraits):
         self.bottomPanel = BottomPanel(
                 slicerDims=slicerDims,
                 cmap=ColorMapper(slicer=self.slicer))
-        self.bottomPanel.cmap.norm.set_scale(arr)
+        self.bottomPanel.cmap.norm.set_scale(slicer.arr)
 
         self._defaultFactories = [
             CursorInfoTool(
@@ -106,13 +106,13 @@ class ImageViewer(HasTraits):
                     Action(name='Load', action='_load_rois'),
                     name='File')),
             resizable=True,
-            handler=ImageViewerHandler())
+            handler=ArrayViewerHandler())
 
     def _get_pixmap(self):
         return self.bottomPanel.cmap.array_to_pixmap(self.slicer.view)
 
 
-class ImageViewerHandler(Controller):
+class ArrayViewerHandler(Controller):
     loadSaveFile = File
 
     def _loadSaveFile_default(self):
@@ -137,6 +137,6 @@ if __name__ == '__main__':
     import numpy as np
     from operator import mul
 
-    arr = np.arange(32*64*128).reshape(32,64,128)
-    iv = ImageViewer(arr)
+    arr = np.random.random(32*43*53*23).reshape(32,43,53,23)
+    iv = ArrayViewer(Slicer(arr))
     iv.configure_traits()
