@@ -74,7 +74,7 @@ class Norm(HasTraits):
         self._scaled = False
 
     def set_scale(self, ndarray):
-        vmin,vmax = ndarray.min(),ndarray.max()
+        vmin,vmax = float(ndarray.min()), float(ndarray.max())
         self.vmin = vmin
         self.vmax = vmax
         self.low = vmin

@@ -8,7 +8,7 @@ from itertools import izip
 from traits.api import (HasTraits, HasPrivateTraits, List, Instance, Property,
     Any, Str, Int, Float, Event, Button, DelegatesTo, WeakRef, Array, File,
     on_trait_change, cached_property)
-from traitsui.api import View, Item, HGroup, TableEditor, TabularEditor
+from traitsui.api import View, Item, HGroup, TabularEditor
 from traitsui.tabular_adapter import TabularAdapter
 from traitsui.menu import OKCancelButtons
 from traitsui.table_column import ObjectColumn
@@ -56,7 +56,7 @@ class ROI(HasTraits):
         self.on_trait_change(self.update_stats, ['slc', 'poly'])
         self.update_stats()
 
-    def masked(self, arr):
+    def mask_arr(self, arr):
         return np.ma.array(data=arr, mask=create_mask(arr.shape, self.slc, self.poly))
 
     def update_stats(self):
@@ -104,21 +104,10 @@ class ROIAdapter(TabularAdapter):
 
 roi_editor = TabularEditor(
         adapter = ROIAdapter(),
-        operations = [],
+        operations = ['edit'],
         multi_select = True,
+        auto_update = True,
         selected = 'selected')
-
-_roi_editor = TableEditor(
-    sortable = False,
-    configurable = False,
-    selection_mode = 'rows',
-    selected = 'selected',
-    columns = [ 
-        ObjectColumn(name='name'),
-        ObjectColumn(name='slc', editable=False),
-        ObjectColumn(name='mean', format='%0.3g', editable=False),
-        ObjectColumn(name='std', format='%0.3g', editable=False),
-        ObjectColumn(name='count', format='%d', editable=False)])
 
     
 class ROIManager(HasTraits):
@@ -148,12 +137,15 @@ class ROIManager(HasTraits):
             Item('dump',
                 show_label=False)),
         Item('rois', 
-            editor=roi_editor, 
+            editor=roi_editor,
+            style='readonly',
             show_label=False))
     
     def new(self, poly):
         self.rois.append(self._new_roi(self.slicer.slc, poly))
 
+    def by_name(self, name):
+        return [roi for roi in self.rois if roi.name==name]
 
     def _dump_fired(self):
         print(self.rois)
@@ -190,14 +182,17 @@ class ROIManager(HasTraits):
         rois = []
         dim,dimVal = self.freedim.dim, self.freedim.val
         dimMax = self.slicer.shape[dim]
+        indicies = set(range(dimMax))
         for roi in self.selected:
             slc = roi.slc
             if dim in slc.freedims:
-                for i in set(range(dimMax)) - set([slc[dim]]):
+                for i in indicies - set([slc[dim]]):
                     slc = list(roi.slc)
                     slc[dim] = i
                     slc = SliceTuple(slc)
-                    rois.append(self._new_roi(slc, roi.poly.copy()))
+                    rois.append(
+                        ROI(name=roi.name, slicer=self.slicer,
+                            slc=slc, poly=roi.poly.copy()))
         self.rois.extend(rois)
 
 
@@ -210,19 +205,26 @@ class ROIPersistence(object):
     @staticmethod
     def save(rois, filename):
         with h5py.File(filename, 'w') as f:
-            slices = [roi.slc for roi in rois]
-            f['/rois/names'] = [roi.name for roi in rois]
-            f['/rois/polys'] = [roi.poly for roi in rois]
-            f['/rois/viewdims'] = [slc.viewdims for slc in slices]
-            f['/rois/slices'] = [ROIPersistence.filter_viewdims(slc) for slc in slices]
+            root = f.create_group('rois')
+            for i,roi in enumerate(rois):
+                roigrp = root.create_group('%d' % i)
+                # h5py only support utf8 strings at the moment, need to coerce data to
+                # this representation
+                roigrp.attrs['name'] = roi.name
+                roigrp.attrs['viewdims'] = roi.slc.viewdims
+                roigrp.attrs['arrslc'] = ROIPersistence.filter_viewdims(roi.slc)
+                roigrp['poly'] = roi.poly
 
     @staticmethod
     def load(filename, slicer):
+        rois = []
         with h5py.File(filename, 'r') as f:
-            names = f['/rois/names'].value
-            polys = f['/rois/polys'].value
-            viewdims = f['/rois/viewdims'].value
-            slices = f['/rois/slices'].value
-            slcs = [SliceTuple.from_arrayslice(slc,vdims) for slc,vdims in izip(slices,viewdims)]
-            return [ROI(name=name, slc=slc,
-                poly=poly, slicer=slicer) for (name,slc,poly) in izip(names,slcs,polys)]
+            for roigrp in f['/rois'].itervalues():
+                viewdims = roigrp.attrs['viewdims']
+                arrslc = roigrp.attrs['arrslc']
+                rois.append(
+                    ROI(name=roigrp.attrs['name'],
+                        poly=roigrp['poly'].value,
+                        slc=SliceTuple.from_arrayslice(arrslc, viewdims),
+                        slicer=slicer))
+        return rois

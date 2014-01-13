@@ -134,6 +134,10 @@ class _PixmapEditor(Editor):
         self._config_mouse(ev)
         self.mouse.doubleclicked = True
 
+    def __del__(self):
+        print('deleting', self)
+        for tool in self._tools:
+            tool.destroy()
 
 class PixmapEditor(BasicEditorFactory):
     klass = _PixmapEditor

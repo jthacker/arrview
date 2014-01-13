@@ -1,8 +1,9 @@
 #!/usr/bin/env python
+import os
+
 from traits.api import *
 from traitsui.api import *
 from traitsui.menu import Menu, Action, MenuBar
-
 
 from .slicer import Slicer
 from .roi import ROIManager, ROIPersistence 
