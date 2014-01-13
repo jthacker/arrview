@@ -104,9 +104,6 @@ class GraphicsTool(HasTraits):
     def mouse_double_clicked(self):
         pass
 
-    def __del__(self):
-        print(self)
-
 
 class GraphicsToolFactory(HasTraits):
     klass = Instance(GraphicsTool)
@@ -375,7 +372,6 @@ class _ROIEditTool(_ROIDisplayTool):
 
     def mouse_released(self):
         if self._selectedROI:
-            print('mouse_released')
             self.graphics.scene().removeItem(self._movingPolyItem)
             self._movingPolyItem = None
             slc,poly = self._selectedROI.slc, self._selectedROI.poly

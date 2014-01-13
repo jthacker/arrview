@@ -100,7 +100,6 @@ class _PixmapEditor(Editor):
             tool.destroy()
         self.mouse = MouseState()
         self._tools = self.toolSet.init_tools(self.control, self.mouse)
-        print('factory_changed')
 
     def update_editor(self):
         self.control.setPixmap(self.value)

@@ -7,5 +7,5 @@ from .slicer import Slicer
 def view(arr):
     slicer = Slicer(arr)
     viewer = ArrayViewer(slicer)
-    viewer.configure_trait()
+    viewer.configure_traits()
     return viewer
