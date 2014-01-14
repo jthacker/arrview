@@ -24,10 +24,10 @@ def create_mask(shape, slc, poly):
     shape -- a tuple with the size of each dimension in the mask
     slc   -- SliceTuple describing where to apply the polygon to
     poly  -- A numpy array of (x,y) point pairs describing a polygon
-
+    
     Returns:
-    binary mask with the region in poly set to true and everywhere else
-    set to false
+    binary mask with the region in poly set to False and everywhere else
+    set to True
     '''
     mask = np.ones(shape, dtype=bool)
     if len(poly) > 0:
@@ -43,10 +43,19 @@ class ROI(HasTraits):
     poly = Array
 
     def mask_arr(self, arr):
-        return np.ma.array(data=arr, mask=create_mask(arr.shape, self.slc, self.poly))
+        return np.ma.array(data=arr, mask=self.as_mask(arr.shape))
+
+    def as_mask(self, shape):
+        return create_mask(shape, self.slc, self.poly)
 
     def __repr__(self):
         return rep(self, ['name', 'slc', 'poly'])
+
+
+def mask_arr(arr, rois):
+    '''AND all the roi masks together and mask the array'''
+    mask = reduce(lambda a,b: np.logical_and(a,b), (r.as_mask(arr.shape) for r in rois))
+    return np.ma.array(data=arr, mask=mask)
 
 
 class ROIStats(HasTraits):
