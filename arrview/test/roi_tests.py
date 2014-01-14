@@ -4,7 +4,7 @@ from numpy.testing import assert_array_equal
 from traits.testing.unittest_tools import unittest
 from traits.testing.api import UnittestTools
 
-from ..roi import ROI, ROIManager, ROIPersistence
+from ..roi import ROI, ROIStats, ROIManager, ROIPersistence
 from ..slicer import Slicer
 
 class TestROI(unittest.TestCase, UnittestTools):
@@ -20,7 +20,7 @@ class TestROI(unittest.TestCase, UnittestTools):
         mask[:1,:1,0] = 0
         expected = np.ma.array(arr, mask=mask)
 
-        assert_array_equal(expected, roi.masked(arr))
+        assert_array_equal(expected, roi.mask_arr(arr))
 
     def test_maskdifferent_freedim(self):
         arr = np.zeros((3,3,3))
@@ -32,7 +32,7 @@ class TestROI(unittest.TestCase, UnittestTools):
         mask[:1,:1,1] = 0
         expected = np.ma.array(arr, mask=mask)
 
-        assert_array_equal(expected, roi.masked(arr))
+        assert_array_equal(expected, roi.mask_arr(arr))
 
     def test_coordinate_order(self):
         '''The specified coordinates should be (row1,col1), (row2,col2), ...
@@ -46,7 +46,7 @@ class TestROI(unittest.TestCase, UnittestTools):
         mask[0,:] = 0
         expected = np.ma.array(arr, mask=mask)
 
-        assert_array_equal(expected, roi.masked(arr))
+        assert_array_equal(expected, roi.mask_arr(arr))
 
     def test_poly_changed(self):
         slicer = Slicer(np.zeros((2,2,2)))
@@ -66,12 +66,12 @@ class TestROI(unittest.TestCase, UnittestTools):
         mask = np.ones(slicer.shape)
         mask[0,:] = 0
         expected = np.ma.array(arr, mask=mask)
-        assert_array_equal(expected, roi.masked(arr))
+        assert_array_equal(expected, roi.mask_arr(arr))
        
         # Swap the slicer dimensions, should transpose mask
         slicer.set_viewdims(slicer.slc.ydim, slicer.slc.xdim)
         roi = ROI(slc=slicer.slc, poly=poly, slicer=slicer)
-        assert_array_equal(expected.T, roi.masked(arr))
+        assert_array_equal(expected.T, roi.mask_arr(arr))
 
     def test_save_and_load(self):
         arr = np.zeros((3,3))
@@ -124,22 +124,23 @@ class Test_ROI_Stats(unittest.TestCase, UnittestTools):
         arr = np.arange(2*3*4).reshape(2,3,4)
         self.slicer = Slicer(arr)
         poly = np.array([(0,0),(0,2),(2,2),(2,0)])
-        self.roi = ROI(slc=self.slicer.slc, poly=poly, slicer=self.slicer)
+        roi = ROI(slc=self.slicer.slc, poly=poly)
+        self.stats = ROIStats(roi=roi, arr=arr)
 
     def test_mean(self):
-        self.assertAlmostEqual(self.roi.mean, 8.0)
+        self.assertAlmostEqual(self.stats.mean, 8.0)
 
     def test_std(self):
-        self.assertAlmostEqual(self.roi.std, 6.324555320336759)
+        self.assertAlmostEqual(self.stats.std, 6.324555320336759)
 
     def test_size(self):
-        self.assertEqual(self.roi.size, 4)
+        self.assertEqual(self.stats.size, 4)
 
     def _mean_updated(self):
         newPoly = np.array([(0,0), (0,3), (3,3), (3,0)])
-        with self.assertTraitChanges(self.roi, 'mean') as result:
+        with self.assertTraitChanges(self.stats, 'mean') as result:
             self.roi.poly = newPoly
 
-        expected = (self.roi, 'mean', 8.0, 0.25)
+        expected = (self.stats, 'mean', 8.0, 0.25)
         self.assertSequenceEqual(result.events, expected)
             

@@ -1,9 +1,8 @@
 import skimage.draw
 import numpy as np
-from collections import namedtuple
-import os
-import h5py
+import os, h5py
 from itertools import izip
+from collections import namedtuple, OrderedDict
 
 from traits.api import (HasTraits, HasPrivateTraits, List, Instance, Property,
     Any, Str, Int, Float, Event, Button, DelegatesTo, WeakRef, Array, File,
@@ -40,9 +39,22 @@ def create_mask(shape, slc, poly):
 
 class ROI(HasTraits):
     name = Str
-    slicer = Instance(Slicer)
     slc = Instance(SliceTuple)
     poly = Array
+
+    def mask_arr(self, arr):
+        return np.ma.array(data=arr, mask=create_mask(arr.shape, self.slc, self.poly))
+
+    def __repr__(self):
+        return rep(self, ['name', 'slc', 'poly'])
+
+
+class ROIStats(HasTraits):
+    roi = Instance(ROI)
+    arr = Any
+    name = DelegatesTo('roi')
+    slc = DelegatesTo('roi')
+    poly = DelegatesTo('roi')
 
     mean = Property
     _mean = Float
@@ -52,26 +64,13 @@ class ROI(HasTraits):
     _size = Int
 
     def __init__(self, **traits):
-        super(ROI, self).__init__(**traits)
+        super(ROIStats, self).__init__(**traits)
         self.on_trait_change(self.update_stats, ['slc', 'poly'])
         self.update_stats()
 
-    def mask_arr(self, arr):
-        return np.ma.array(data=arr, mask=create_mask(arr.shape, self.slc, self.poly))
-
     def update_stats(self):
-        shape = self.slicer.shape
-        masked_data = self.slicer.arr[create_mask(shape, self.slc, self.poly) != True]
-        self._mean = masked_data.mean()
-        self._std = masked_data.std()
-        self._size = masked_data.size
-
-    def update_stats_fast(self):
-        view = self.slc.viewarray(self.slicer.arr)
-        # create a 2D SliceTuple
-        slc2D = SliceTuple(self.slc[v] for v in sorted(self.slc.viewdims))
-        masked_data = view[create_mask(view.shape, slc2D, self.poly) != True]
-
+        shape = self.arr.shape
+        masked_data = self.arr[create_mask(shape, self.slc, self.poly) != True]
         self._mean = masked_data.mean()
         self._std = masked_data.std()
         self._size = masked_data.size
@@ -86,10 +85,10 @@ class ROI(HasTraits):
         return self._size
 
     def __repr__(self):
-        return rep(self, ['name','slc','poly','size','mean','std'])
+        return rep(self, ['name','size','mean','std'])
 
 
-class ROIAdapter(TabularAdapter):
+class ROIStatsAdapter(TabularAdapter):
     columns = [ ('Name', 'name'),
                 ('Slice', 'slc'),
                 ('Mean', 'mean'),
@@ -103,53 +102,67 @@ class ROIAdapter(TabularAdapter):
 
 
 roi_editor = TabularEditor(
-        adapter = ROIAdapter(),
+        adapter = ROIStatsAdapter(),
         operations = ['edit'],
         multi_select = True,
         auto_update = True,
-        selected = 'selected')
+        selected = 'selectedStats')
 
     
 class ROIManager(HasTraits):
     slicer = Instance(Slicer)
     rois = List(ROI, [])
-    nextID = Int(0)
     selected = List(ROI, [])
+    roistats = List(ROIStats, [])
+    selectedStats = List(ROIStats, [])
+    
+    nextID = Int(0)
     slicerDims = Instance(SlicerDims)
     freedim = DelegatesTo('slicerDims')
 
     replicate = Button
     copy = Button
     delete = Button
-    dump = Button
     
     view = View(
         HGroup(
             Item('delete',
-                enabled_when='len(selected) > 0',
+                enabled_when='len(selectedStats) > 0',
                 show_label=False),
             Item('copy',
-                enabled_when='len(selected) > 0',
+                enabled_when='len(selectedStats) > 0',
                 show_label=False),
             Item('replicate',
-                enabled_when='len(selected) > 0',
-                show_label=False),
-            Item('dump',
+                enabled_when='len(selectedStats) > 0',
                 show_label=False)),
-        Item('rois', 
+        Item('roistats', 
             editor=roi_editor,
             style='readonly',
             show_label=False))
-    
+
+    def __init__(self, **traits):
+        super(ROIManager, self).__init__(**traits)
+        self._statsmap = OrderedDict()
+
+    @on_trait_change('selectedStats[]')
+    def selected_stats_changed(self):
+        self.selected = [s.roi for s in self.selectedStats]
+
+    @on_trait_change('rois[]')
+    def rois_updated(self, obj, trait, old, new):
+        for roi in old:
+            del self._statsmap[roi]
+
+        for roi in new:
+            self._statsmap[roi] = ROIStats(roi=roi, arr=self.slicer.arr)
+
+        self.roistats = self._statsmap.values()
+
     def new(self, poly):
         self.rois.append(self._new_roi(self.slicer.slc, poly))
 
     def by_name(self, name):
         return [roi for roi in self.rois if roi.name==name]
-
-    def _dump_fired(self):
-        print(self.rois)
-        import ipdb; ipdb.set_trace()
 
     def _new_roi(self, slc, poly):
         roi = ROI(
