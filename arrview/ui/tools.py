@@ -213,9 +213,9 @@ class HighlightingGraphicsPolygonItem(QGraphicsPolygonItem):
         'normal'   : PenBrushState(settings.default_roi_pen(False),
                                    settings.default_roi_brush()),
         'highlight': PenBrushState(settings.default_roi_pen(True,color=Qt.red),
-                                   settings.default_roi_brush()),
+                                   settings.default_roi_brush(alpha=0)),
         'selected' : PenBrushState(settings.default_roi_pen(True),
-                                   settings.default_roi_brush(alpha=100)),
+                                   settings.default_roi_brush(alpha=50)),
         }
     def __init__(self, polygon, hover=False):
         super(HighlightingGraphicsPolygonItem, self).__init__(polygon)
@@ -290,7 +290,7 @@ class _ROIDisplayTool(GraphicsTool):
 
     def roi_under_mouse(self):
         for roi,polyItem in self._polyItems.iteritems():
-            if polyItem.isUnderMouse():
+            if polyItem.state == 'highlight':
                 return (roi, polyItem)
         return (None,None)
    
@@ -324,13 +324,6 @@ class _ROIDisplayTool(GraphicsTool):
 class ROIDisplayTool(GraphicsToolFactory):
     klass = _ROIDisplayTool
     roiManager = Instance(ROIManager)
-
-class _ROISelectionTool(GraphicsTool):
-    def mouse_pressed(self):
-        if self.mouse.buttons.left:
-            roi,poly = self.roi_under_mouse()
-            if roi is not None:
-                self.roiManager.selected += roi
 
 
 class _ROIEditTool(_ROIDisplayTool):
@@ -370,8 +363,6 @@ class _ROIEditTool(_ROIDisplayTool):
             dx,dy = round(dx),round(dy)
             self._snappingPolyItem.setPos(dx,dy)
             self._translation = (dx,dy)
-        elif self.mouse.buttons.none:
-            roi,polyItem = self.roi_under_mouse()
 
     def mouse_released(self):
         if self._selectedROI:

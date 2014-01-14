@@ -10,6 +10,6 @@ def default_roi_pen(dashed=True,color=Qt.green):
     pen.setJoinStyle(Qt.RoundJoin)
     return pen
 
-def default_roi_brush(alpha=50):
+def default_roi_brush(alpha=0):
     return QBrush(QColor(0,255,0,alpha))
 
