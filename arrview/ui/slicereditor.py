@@ -91,8 +91,12 @@ class _PixmapEditor(Editor):
         self.control.mousedoubleclicked.connect(self._mouse_double_clicked)
         self.control.setPixmap(self.value)
         self.control.fitView()
+        self.control.destroyed.connect(self._control_destroyed)
         self._tools = []
         self.toolSet = self.factory.toolSet
+
+    def _control_destroyed(self):
+        self._tools = []
 
     @on_trait_change('toolSet.factories')
     def factories_changed(self):
@@ -134,10 +138,6 @@ class _PixmapEditor(Editor):
         self._config_mouse(ev)
         self.mouse.doubleclicked = True
 
-    def __del__(self):
-        print('deleting', self)
-        for tool in self._tools:
-            tool.destroy()
 
 class PixmapEditor(BasicEditorFactory):
     klass = _PixmapEditor
