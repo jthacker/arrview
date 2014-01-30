@@ -14,7 +14,7 @@ class TestROI(unittest.TestCase, UnittestTools):
     def test_mask(self):
         arr = np.zeros((3,3,3))
         slicer = Slicer(arr)
-        roi = ROI(slc=slicer.slc, poly=self.sqrPoly, slicer=slicer)
+        roi = ROI(slc=slicer.slc, poly=self.sqrPoly)
 
         mask = np.ones(slicer.shape)
         mask[:1,:1,0] = 0
@@ -26,7 +26,7 @@ class TestROI(unittest.TestCase, UnittestTools):
         arr = np.zeros((3,3,3))
         slicer = Slicer(arr)
         slicer.set_freedim(2,1)
-        roi = ROI(slc=slicer.slc, poly=self.sqrPoly, slicer=slicer)
+        roi = ROI(slc=slicer.slc, poly=self.sqrPoly)
 
         mask = np.ones(slicer.shape)
         mask[:1,:1,1] = 0
@@ -41,7 +41,7 @@ class TestROI(unittest.TestCase, UnittestTools):
         arr = np.zeros((3,3))
         slicer = Slicer(arr)
 
-        roi = ROI(slc=slicer.slc, poly=poly, slicer=slicer)
+        roi = ROI(slc=slicer.slc, poly=poly)
         mask = np.ones(slicer.shape)
         mask[0,:] = 0
         expected = np.ma.array(arr, mask=mask)
@@ -52,7 +52,7 @@ class TestROI(unittest.TestCase, UnittestTools):
         slicer = Slicer(np.zeros((2,2,2)))
         # An invalid division results when calculating std-dev for an
         with np.errstate(invalid='ignore'):
-            roi = ROI(slicer=slicer, slc=slicer.slc, poly=np.array([]))
+            roi = ROI(slc=slicer.slc, poly=np.array([]))
             with self.assertTraitChanges(roi, 'poly') as result:
                 roi.set(slc=slicer.slc, poly=self.sqrPoly)
             assert_array_equal(self.sqrPoly, result.event[3])
@@ -62,7 +62,7 @@ class TestROI(unittest.TestCase, UnittestTools):
         arr = np.zeros((3,3))
         slicer = Slicer(arr)
 
-        roi = ROI(slc=slicer.slc, poly=poly, slicer=slicer)
+        roi = ROI(slc=slicer.slc, poly=poly)
         mask = np.ones(slicer.shape)
         mask[0,:] = 0
         expected = np.ma.array(arr, mask=mask)
@@ -70,7 +70,7 @@ class TestROI(unittest.TestCase, UnittestTools):
        
         # Swap the slicer dimensions, should transpose mask
         slicer.set_viewdims(slicer.slc.ydim, slicer.slc.xdim)
-        roi = ROI(slc=slicer.slc, poly=poly, slicer=slicer)
+        roi = ROI(slc=slicer.slc, poly=poly)
         assert_array_equal(expected.T, roi.mask_arr(arr))
 
     def test_save_and_load(self):
@@ -78,11 +78,11 @@ class TestROI(unittest.TestCase, UnittestTools):
         slicer = Slicer(arr)
         poly = np.array([(0,0),(0,3),(1,3),(1,0)])
 
-        roi = ROI(slc=slicer.slc, poly=poly, slicer=slicer, name='name')
+        roi = ROI(slc=slicer.slc, poly=poly, name='name')
         _,filename = tempfile.mkstemp()
 
         ROIPersistence.save([roi], filename)
-        lrois = ROIPersistence.load(filename, slicer)
+        lrois = ROIPersistence.load(filename)
 
         self.assertEquals(len(lrois), 1)
         lroi = lrois[0]

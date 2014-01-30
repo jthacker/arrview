@@ -129,7 +129,7 @@ class ArrayViewerHandler(Controller):
         filename = open_file(file_name=self.loadSaveFile)
         if filename:
             self.loadSaveFile = filename
-            rois = ROIPersistence.load(filename, info.object.slicer)
+            rois = ROIPersistence.load(filename)
             info.object.roiManager.rois.extend(rois)
 
 

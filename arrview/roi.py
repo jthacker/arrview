@@ -12,29 +12,12 @@ from traitsui.tabular_adapter import TabularAdapter
 from traitsui.menu import OKCancelButtons
 from traitsui.table_column import ObjectColumn
 
+from jtmri.roi import create_mask
+
 from .util import rep
 from .slicer import Slicer, SliceTuple
 from .ui.dimeditor import SlicerDims
 from .file_dialog import save_file, open_file
-
-
-def create_mask(shape, slc, poly):
-    '''Convert the polygons to a binary mask according the specified array shape
-    Args:
-    shape -- a tuple with the size of each dimension in the mask
-    slc   -- SliceTuple describing where to apply the polygon to
-    poly  -- A numpy array of (x,y) point pairs describing a polygon
-    
-    Returns:
-    binary mask with the region in poly set to False and everywhere else
-    set to True
-    '''
-    mask = np.ones(shape, dtype=bool)
-    if len(poly) > 0:
-        viewShape = shape[slc.ydim],shape[slc.xdim]
-        y,x = skimage.draw.polygon(y=poly[:,1], x=poly[:,0], shape=viewShape)
-        mask[slc.slice_from_screen_coords(x, y, mask)] = False
-    return mask
 
 
 class ROI(HasTraits):
@@ -54,7 +37,7 @@ class ROI(HasTraits):
 
 def mask_arr(arr, rois):
     '''AND all the roi masks together and mask the array'''
-    mask = reduce(lambda a,b: np.logical_and(a,b), (r.as_mask(arr.shape) for r in rois))
+    mask = reduce(np.logical_and, (r.as_mask(arr.shape) for r in rois))
     return np.ma.array(data=arr, mask=mask)
 
 
@@ -150,8 +133,8 @@ class ROIManager(HasTraits):
             show_label=False))
 
     def __init__(self, **traits):
-        super(ROIManager, self).__init__(**traits)
         self._statsmap = OrderedDict()
+        super(ROIManager, self).__init__(**traits)
 
     @on_trait_change('selectedStats[]')
     def selected_stats_changed(self):
@@ -186,7 +169,6 @@ class ROIManager(HasTraits):
         idx = self.rois.index(roi)
         newROI = ROI(
             name=roi.name,
-            slicer=self.slicer,
             slc=slc,
             poly=poly)
         self.rois[idx] = newROI
@@ -213,7 +195,7 @@ class ROIManager(HasTraits):
                     slc[dim] = i
                     slc = SliceTuple(slc)
                     rois.append(
-                        ROI(name=roi.name, slicer=self.slicer,
+                        ROI(name=roi.name,
                             slc=slc, poly=roi.poly.copy()))
         self.rois.extend(rois)
 
@@ -238,7 +220,7 @@ class ROIPersistence(object):
                 roigrp['poly'] = roi.poly
 
     @staticmethod
-    def load(filename, slicer):
+    def load(filename):
         rois = []
         with h5py.File(filename, 'r') as f:
             for roigrp in f['/rois'].itervalues():
@@ -247,6 +229,5 @@ class ROIPersistence(object):
                 rois.append(
                     ROI(name=roigrp.attrs['name'],
                         poly=roigrp['poly'].value,
-                        slc=SliceTuple.from_arrayslice(arrslc, viewdims),
-                        slicer=slicer))
+                        slc=SliceTuple.from_arrayslice(arrslc, viewdims)))
         return rois
