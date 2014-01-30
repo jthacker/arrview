@@ -104,9 +104,6 @@ class GraphicsTool(HasTraits):
     def mouse_double_clicked(self):
         pass
 
-    def __del__(self):
-        print('deleting ', self)
-
 
 class GraphicsToolFactory(HasTraits):
     klass = Instance(GraphicsTool)
