@@ -3,6 +3,7 @@ import os
 
 from traits.api import *
 from traitsui.api import *
+from traitsui.key_bindings import KeyBinding, KeyBindings
 from traitsui.menu import Menu, Action, MenuBar
 
 from .slicer import Slicer
@@ -14,6 +15,12 @@ from .ui.slicereditor import PixmapEditor
 from .ui.dimeditor import SlicerDims
 from .ui.tools import (ToolSet, CursorInfoTool, PanTool, ZoomTool, 
         ROIDrawTool, ROIDisplayTool, ROIEditTool, ColorMapTool)
+
+
+bindings = KeyBindings(
+        KeyBinding(binding1='Esc', 
+                   description='Escape Key',
+                   method_name='escape_pressed'))
 
 class BottomPanel(HasTraits):
     slicerDims = Instance(SlicerDims)
@@ -107,6 +114,7 @@ class ArrayViewer(HasTraits):
                     Action(name='Load', action='_load_rois'),
                     name='File')),
             resizable=True,
+            key_bindings=bindings,
             handler=ArrayViewerHandler())
 
     def _get_pixmap(self):
@@ -132,6 +140,9 @@ class ArrayViewerHandler(Controller):
             rois = ROIPersistence.load(filename)
             info.object.roiManager.rois.extend(rois)
 
+    def escape_pressed(self, info):
+        '''Prevent escape key from closing the window'''
+        pass
 
 
 if __name__ == '__main__':
