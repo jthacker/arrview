@@ -18,9 +18,10 @@ from .ui.tools import (ToolSet, CursorInfoTool, PanTool, ZoomTool,
 
 
 bindings = KeyBindings(
-        KeyBinding(binding1='Esc', 
-                   description='Escape Key',
-                   method_name='escape_pressed'))
+    KeyBinding(binding1='Esc', 
+        description='Escape Key',
+        method_name='escape_pressed'))
+
 
 class BottomPanel(HasTraits):
     slicerDims = Instance(SlicerDims)
@@ -30,6 +31,7 @@ class BottomPanel(HasTraits):
             Item('slicerDims', style='custom', show_label=False),
             #Item('cmap', style='custom', show_label=False),
             )
+
 
 class ArrayViewer(HasTraits):
     slicer = Instance(Slicer)
@@ -139,11 +141,11 @@ class ArrayViewerHandler(Controller):
             self.loadSaveFile = filename
             rois = ROIPersistence.load(filename)
             info.object.roiManager.rois.extend(rois)
-
+    
     def escape_pressed(self, info):
         '''Prevent escape key from closing the window'''
         pass
-
+    
 
 if __name__ == '__main__':
     import numpy as np

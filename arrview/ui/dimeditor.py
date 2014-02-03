@@ -78,6 +78,12 @@ class FreeDim(HasPrivateTraits):
         else:
             self.val += 1
 
+    def dec(self):
+        if self.val == 0:
+            self.val = self.val_high
+        else:
+            self.val -= 1
+
 
 class SlicerDims(HasPrivateTraits):
     slicer = Instance(Slicer)

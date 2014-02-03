@@ -56,7 +56,10 @@ class ArrayGraphicsView(QGraphicsView):
 
     def wheelEvent(self, ev):
         self.mousewheeled.emit(ev)
-        
+
+    def keyPressEvent(self, ev):
+        pass
+
     def setPixmap(self, pixmap):
         '''Set the array to be viewed.
         Args:
