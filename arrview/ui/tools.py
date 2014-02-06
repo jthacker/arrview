@@ -512,9 +512,9 @@ class _ColorMapTool(GraphicsTool):
             norm = self.colorMapper.norm
             low,high = norm.low,norm.high
 
-            a = 0.01 * (high - low)
-            center = self.icenter + a * (coords[0] - origin[0])
-            halfwidth = (self.iwidth + -a * (coords[1] - origin[1])) / 2.0
+            scale = lambda dw: 0.001 * (high - low) * dw
+            center = self.icenter + scale(coords[0] - origin[0])
+            halfwidth = (self.iwidth - scale(coords[1] - origin[1])) / 2.0
             norm.vmin = clamp(center - halfwidth, low, high)
             norm.vmax = clamp(center + halfwidth, low, high)
 

@@ -29,7 +29,7 @@ class BottomPanel(HasTraits):
 
     view = View(
             Item('slicerDims', style='custom', show_label=False),
-            #Item('cmap', style='custom', show_label=False),
+            Item('cmap', style='custom', show_label=False),
             )
 
 
@@ -119,6 +119,7 @@ class ArrayViewer(HasTraits):
             key_bindings=bindings,
             handler=ArrayViewerHandler())
 
+    @cached_property
     def _get_pixmap(self):
         return self.bottomPanel.cmap.array_to_pixmap(self.slicer.view)
 

@@ -18,7 +18,7 @@ def ndarray_to_pixdata(array, cmap, norm):
     '''
     assert array.ndim == 2, 'Only 2D arrays are allowed'
     h,w = array.shape
-    array = (255*cmap(norm(array))).astype('uint32')
+    array = (255*cmap(norm(array).astype('float'))).astype('uint32')
     array = (255 << 24 | array[:,:,0] << 16 | array[:,:,1] << 8 | array[:,:,2]).flatten()
     return array
 
@@ -74,11 +74,12 @@ class Norm(HasTraits):
         self._scaled = False
 
     def set_scale(self, ndarray):
-        vmin,vmax = float(ndarray.min()), float(ndarray.max())
-        self.vmin = vmin
-        self.vmax = vmax
-        self.low = vmin
-        self.high = vmax
+        arr = ndarray[np.isfinite(ndarray)]
+        pdf,bins = np.histogram(arr, bins=50)
+        cdf = pdf.cumsum() / float(arr.size)
+        self.vmin = bins[np.argmax(cdf > 0.05)]
+        self.vmax = bins[np.argmin(cdf < 0.95)]
+        self.low,self.high = float(arr.min()), float(arr.max())
         self._scaled = True
 
     def normalize(self, ndarray):

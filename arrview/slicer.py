@@ -76,7 +76,7 @@ class SliceTuple(tuple):
     def freedims(self):
         return tuple(i for i,x in enumerate(self) if i not in self.viewdims)
 
-    #TODO: Get rid of this method
+    #TODO: @deprecated: Get rid of this method
     @staticmethod
     def from_arrayslice(arrslice, viewdims):
         '''Replace the dims from viedims in arrslice.
