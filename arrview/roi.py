@@ -19,6 +19,7 @@ from .slicer import Slicer, SliceTuple
 from .ui.dimeditor import SlicerDims
 from .file_dialog import save_file, open_file
 
+import numpy as np
 
 class ROI(HasTraits):
     name = Str
@@ -26,7 +27,7 @@ class ROI(HasTraits):
     poly = Array
 
     def mask_arr(self, arr):
-        return np.ma.array(data=arr, mask=self.as_mask(arr.shape))
+        return np.ma.array(data=arr, mask=np.logical_not(self.as_mask(arr.shape)))
 
     def as_mask(self, shape):
         return create_mask(shape, self.slc, self.poly)
@@ -62,7 +63,7 @@ class ROIStats(HasTraits):
 
     def update_stats(self):
         shape = self.arr.shape
-        masked_data = self.arr[create_mask(shape, self.slc, self.poly) != True]
+        masked_data = self.arr[create_mask(shape, self.slc, self.poly)]
         self._mean = masked_data.mean()
         self._std = masked_data.std()
         self._size = masked_data.size
