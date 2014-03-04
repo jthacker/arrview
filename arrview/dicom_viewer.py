@@ -1,0 +1,127 @@
+import os.path
+from threading import Thread
+
+from traits.api import (HasTraits, HasStrictTraits, List, Int, String, Button, Instance,
+        Directory, Any)
+from traitsui.api import (View, Group, HGroup, TableEditor, Item)
+from traitsui.table_column import ObjectColumn
+
+import jtmri.dcm
+
+from .file_dialog import open_file
+from . import create_viewer
+
+class DicomSeries(HasStrictTraits):
+    number = Int
+    description = String
+    imagecount = Int
+    series = Any
+
+dicomseries_editor = TableEditor(
+    sortable = False,
+    configurable = False,
+    auto_size = True,
+    show_toolbar = False,
+    selection_mode = 'row',
+    selected = 'selection',
+    columns = [ ObjectColumn(name='number', label='SeriesNumber', editable=False),
+                ObjectColumn(name='description', label='Description', editable=False),
+                ObjectColumn(name='imagecount', label='Image Count', editable=False) ])
+
+
+class DicomReaderThread(Thread):
+    def __init__(self, directory, progress=lambda x:x, finished=lambda x:x):
+        super(DicomReaderThread, self).__init__()
+        self.dcms = []
+        self.count = 0
+        self.directory = directory
+        self.progress = progress
+        self.finished = finished
+
+    def run(self):
+        self.dcms = jtmri.dcm.read(self.directory, progress=self.progress, disp=False)
+        self.finished(self.dcms) 
+
+
+class DicomSeriesViewer(HasStrictTraits): 
+    viewseries = Button
+    directory = Directory
+    load = Button
+
+    series = List(DicomSeries, [])
+    message = String('Select a directory to load from')
+    selection = Instance(DicomSeries)
+
+    dicomReaderThread = Instance(Thread)
+
+    def default_traits_view(self):
+        dicomseries_editor.dclick
+        return View(
+            Group(
+                HGroup(
+                    Item('viewseries',
+                        label='View',
+                        show_label=False,
+                        enabled_when='selection is not None'),
+                    Item('directory',
+                        enabled_when='dicomReaderThread is None',
+                        show_label=False),
+                    Item('load',
+                        label='Load',
+                        enabled_when='dicomReaderThread is None',
+                        show_label=False)),
+                Group(
+                    Item('series',
+                            show_label=False,
+                            editor=dicomseries_editor,
+                            style='readonly',
+                            visible_when='len(series) > 0'),
+                    Item('message',
+                        show_label=False,
+                        style='readonly',
+                        visible_when='len(series) == 0'))),
+            resizable=True)
+
+    def _viewseries_fired(self):
+        data = self.selection.series.data(['SliceLocation'])
+        viewer = create_viewer(data, self.directory)
+        viewer.configure_traits()
+
+    def _load_fired(self):
+        self._read_directory()
+        
+    def _directory_default(self):
+        return os.path.abspath('.')
+   
+    def _directory_changed(self):
+        self._read_directory()
+
+    def _read_directory(self):
+        self.series = []
+        self.dicomReaderThread = DicomReaderThread(self.directory,
+                progress=self._update_progress,
+                finished=self._directory_finished_loading)
+        self.dicomReaderThread.start()
+
+    def _update_progress(self, count=0):
+        self.message = 'Read %d dicoms from %s' % (count, self.directory)
+
+    def _directory_finished_loading(self, dcms):
+        dicomseries = []
+        for series in dcms.series():
+            s = series.first
+            dicomseries.append(DicomSeries(number=s.SeriesNumber, 
+                description=s.SeriesDescription, imagecount=len(series),
+                series=series))
+        self.series = dicomseries
+        self.dicomReaderThread = None
+
+
+def main(path):
+    viewer = DicomSeriesViewer()
+    viewer.configure_traits()
+    return viewer
+
+
+if __name__=='__main__':
+    main(os.path.abspath('.'))

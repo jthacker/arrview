@@ -103,7 +103,7 @@ class ColorMapper(HasPrivateTraits):
     norm = Instance(Norm, Norm)
     slicer = Instance(Slicer)
     rescale = Button
-    autoscale = Bool(False)
+    autoscale = Bool(True)
 
     view = View(
             HGroup(

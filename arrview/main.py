@@ -4,7 +4,6 @@ import os
 from traits.api import *
 from traitsui.api import *
 from traitsui.key_bindings import KeyBinding, KeyBindings
-from traitsui.menu import Menu, Action, MenuBar
 
 from .slicer import Slicer
 from .roi import ROIManager, ROIPersistence 
@@ -46,9 +45,10 @@ class ArrayViewer(HasTraits):
 
     toolSet = Instance(ToolSet)
 
-    def __init__(self, slicer):
+    def __init__(self, slicer, default_directory=None):
         super(ArrayViewer, self).__init__()
         self.slicer = slicer
+        self.default_directory = default_directory
         slicerDims = SlicerDims(self.slicer)
         self.roiManager = ROIManager(
                 slicer=self.slicer,
@@ -57,6 +57,7 @@ class ArrayViewer(HasTraits):
                 slicerDims=slicerDims,
                 cmap=ColorMapper(slicer=self.slicer))
         self.bottomPanel.cmap.norm.set_scale(slicer.arr)
+        self.default_directory = default_directory
 
         self._defaultFactories = [
             CursorInfoTool(
@@ -91,6 +92,7 @@ class ArrayViewer(HasTraits):
         self.colormapInfo = msg
   
     def default_traits_view(self):
+        loadSaveFile = os.path.join(os.path.abspath('.')) if self.default_directory is None else self.default_directory
         return View(
             VSplit(
                 HSplit(
@@ -117,7 +119,7 @@ class ArrayViewer(HasTraits):
                     name='File')),
             resizable=True,
             key_bindings=bindings,
-            handler=ArrayViewerHandler())
+            handler=ArrayViewerHandler(loadSaveFile=loadSaveFile))
 
     @cached_property
     def _get_pixmap(self):
@@ -126,9 +128,6 @@ class ArrayViewer(HasTraits):
 
 class ArrayViewerHandler(Controller):
     loadSaveFile = File
-
-    def _loadSaveFile_default(self):
-        return os.path.join(os.path.abspath('.'))
 
     def _save_rois(self, info):
         filename = save_file(file_name=self.loadSaveFile)
@@ -146,12 +145,12 @@ class ArrayViewerHandler(Controller):
     def escape_pressed(self, info):
         '''Prevent escape key from closing the window'''
         pass
-    
+
 
 if __name__ == '__main__':
     import numpy as np
     from operator import mul
+    from . import view
 
     arr = np.random.random(32*43*53*23).reshape(32,43,53,23)
-    iv = ArrayViewer(Slicer(arr))
-    iv.configure_traits()
+    view(arr)

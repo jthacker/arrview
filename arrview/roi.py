@@ -5,7 +5,7 @@ from itertools import izip
 from collections import namedtuple, OrderedDict
 
 from traits.api import (HasTraits, HasPrivateTraits, List, Instance, Property,
-    Any, Str, Int, Float, Event, Button, DelegatesTo, WeakRef, Array, File,
+    Any, Str, Int, Float, Button, DelegatesTo, WeakRef, Array, File,
     on_trait_change, cached_property)
 from traitsui.api import View, Item, HGroup, TabularEditor
 from traitsui.tabular_adapter import TabularAdapter
