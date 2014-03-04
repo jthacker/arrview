@@ -12,10 +12,21 @@ from .file_dialog import open_file
 from . import create_viewer
 
 class DicomSeries(HasStrictTraits):
-    number = Int
+    series_number = Int
     description = String
-    imagecount = Int
+    images = Int
+    slices = Int
+
     series = Any
+
+    def __init__(self, series):
+        s = series.first
+        self.series = series
+        self.series_number = s.SeriesNumber
+        self.description = s.SeriesDescription
+        self.images = len(series)
+        self.slices = len(set(filter(lambda x: x is not None, series.all.SliceLocation))) 
+
 
 dicomseries_editor = TableEditor(
     sortable = False,
@@ -24,9 +35,10 @@ dicomseries_editor = TableEditor(
     show_toolbar = False,
     selection_mode = 'row',
     selected = 'selection',
-    columns = [ ObjectColumn(name='number', label='SeriesNumber', editable=False),
-                ObjectColumn(name='description', label='Description', editable=False),
-                ObjectColumn(name='imagecount', label='Image Count', editable=False) ])
+    columns = [ ObjectColumn(name='series_number', label='Series', editable=False),
+                ObjectColumn(name='description', label='Description', editable=False, width=1.0),
+                ObjectColumn(name='slices', label='Slices', editable=False),
+                ObjectColumn(name='images', label='Images', editable=False) ])
 
 
 class DicomReaderThread(Thread):
@@ -49,7 +61,7 @@ class DicomSeriesViewer(HasStrictTraits):
     load = Button
 
     series = List(DicomSeries, [])
-    message = String('Select a directory to load from')
+    message = String('Select a directory to load dicoms from')
     selection = Instance(DicomSeries)
 
     dicomReaderThread = Instance(Thread)
@@ -83,7 +95,8 @@ class DicomSeriesViewer(HasStrictTraits):
             resizable=True)
 
     def _viewseries_fired(self):
-        data = self.selection.series.data(['SliceLocation'])
+        grouper = ['SliceLocation'] if self.selection.slices > 0 else []
+        data = self.selection.series.data(grouper)
         viewer = create_viewer(data, self.directory)
         viewer.configure_traits()
 
@@ -110,9 +123,7 @@ class DicomSeriesViewer(HasStrictTraits):
         dicomseries = []
         for series in dcms.series():
             s = series.first
-            dicomseries.append(DicomSeries(number=s.SeriesNumber, 
-                description=s.SeriesDescription, imagecount=len(series),
-                series=series))
+            dicomseries.append(DicomSeries(series))
         self.series = dicomseries
         self.dicomReaderThread = None
 
