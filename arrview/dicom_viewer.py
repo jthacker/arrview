@@ -92,6 +92,8 @@ class DicomSeriesViewer(HasStrictTraits):
                         show_label=False,
                         style='readonly',
                         visible_when='len(series) == 0'))),
+            height=400,
+            width=600,
             resizable=True)
 
     def _viewseries_fired(self):
