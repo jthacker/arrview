@@ -1,10 +1,11 @@
 from PySide.QtCore import Qt, QObject, QEvent as QEV
-from PySide.QtGui import QWidget
+from PySide.QtGui import QWidget, QStatusBar
 
 from . import colormap as cmap
 from .slicer import Slicer
 from .ui.pixmapgraphicsview import PixmapGraphicsView
-from .ui.tools import PanTool, ZoomTool
+from .ui.collapsiblepanel import CollapsiblePanel
+from .ui.tools import PanTool, ZoomTool, ArrayValueFromCursorTool
 from .events import GraphicsViewEventFilter, MouseFilter
 
 class ArrayView(object):
@@ -18,33 +19,63 @@ class ArrayView(object):
         return PixmapGraphicsView(pixmap)
 
 
-def main(arr):
+def view(arr):
     import sys
-    from PySide.QtGui import (QApplication, QMainWindow)
+    from PySide.QtGui import (QApplication, QMainWindow, QWidget, QPushButton,
+            QHBoxLayout, QLabel)
 
     app = QApplication.instance()
     if not app:
         app = QApplication(sys.argv)
-  
-    view = ArrayView(arr).widget()
+ 
+    view = ArrayView(arr)
+    viewWidget = view.widget()
+   
+    sidebar = QWidget()
+    sidebar.setLayout(QHBoxLayout())
+    sidebar.layout().addWidget(QLabel('Sidebar'))
+
+    main = CollapsiblePanel(viewWidget, sidebar, CollapsiblePanel.East, collapsed=True)
+
+    dim = QWidget()
+    dim.setLayout(QHBoxLayout())
+    dim.layout().addWidget(QPushButton('Push Me'))
+
+    panel = CollapsiblePanel(main, dim, CollapsiblePanel.South, collapsed=True)
+
+    win = QMainWindow()
+    win.setCentralWidget(panel)
+    win.setStatusBar(QStatusBar(win))
+    win.resize(600,600)
+    win.show()
+    panel.collapse() 
+    cursortool = ArrayValueFromCursorTool(view.slicer)
+
+    def cursor_info(msg):
+        status = '(%s)' % ','.join('%03d' % i for i in msg['slc']) 
+        val = msg['val']
+        if val is not None:
+            status += ' %0.2f' % val
+        win.statusBar().showMessage(status)
+
+    cursortool.status.connect(cursor_info)
+
     tools = {
         PanTool(): 
             [ MouseFilter([QEV.MouseMove, QEV.MouseButtonPress], buttons=Qt.LeftButton),
               MouseFilter(QEV.MouseButtonRelease) ],
         ZoomTool():
             [ MouseFilter(QEV.MouseButtonDblClick, buttons=Qt.MiddleButton),
-              MouseFilter(QEV.Wheel) ]
+              MouseFilter(QEV.Wheel) ],
+        cursortool:
+            [ MouseFilter(QEV.MouseMove) ]
         }
 
-    view.viewport().installEventFilter(GraphicsViewEventFilter(view, tools))
+    viewWidget.viewport().installEventFilter(GraphicsViewEventFilter(viewWidget, tools))
     
-    win = QMainWindow()
-    win.setCentralWidget(view)
-    win.resize(600,600)
-    win.show()
     app.exec_()
 
 
 if __name__ == '__main__':
     import numpy as np
-    main(np.random.random((32,64,128)))
+    view(np.random.random((128,256,128)))
