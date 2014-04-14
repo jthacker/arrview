@@ -1,7 +1,7 @@
 from PySide.QtCore import Qt, Signal, QObject, QPointF
 from PySide.QtGui import QGraphicsView, QTransform
 
-from ..util import Scale, rep
+from ..util import Scale, rep, clamp
 
 class PanTool(object):
     def __init__(self):
@@ -79,3 +79,30 @@ class ArrayValueFromCursorTool(QObject):
         self.status.emit({'slc': slc, 'val': val})
 
         return False
+
+
+class ColorMapTool(object):
+    def __init__(self, arrview):
+        self.origin = None
+        self.arrview = arrview
+
+    def mouse_press_event(self, graphics, mouse):
+        self.origin = mouse.screen_pos
+        vmin,vmax = self.arrview.cmap.scale
+        self.iwidth = vmax - vmin
+        self.icenter = (vmax - vmin) / 2.0 + vmin
+
+    def mouse_move_event(self, graphics, mouse):
+        if self.origin is not None:
+            pos = mouse.screen_pos
+            low,high = self.arrview.cmap.limits
+
+            scale = lambda dw: 0.001 * (high - low) * dw
+            center = self.icenter + scale(pos.x() - self.origin.x())
+            halfwidth = (self.iwidth - scale(pos.y() - self.origin.y())) / 2.0
+            vmin = clamp(center - halfwidth, low, high)
+            vmax = clamp(center + halfwidth, low, high)
+            self.arrview.cmap.scale = Scale(vmin, vmax)
+
+    def mouse_double_click_event(self, graphics, mouse):
+        self.arrview.cmap.reset()

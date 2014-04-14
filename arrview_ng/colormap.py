@@ -1,6 +1,7 @@
 from __future__ import division
 
 import numpy as np
+from PySide.QtCore import QObject, Signal
 from PySide.QtGui import QPixmap, QImage
 from matplotlib.cm import gray, jet, spectral
 
@@ -83,3 +84,33 @@ class LinearNorm(object):
 
     def __repr__(self):
         return rep(self, ['soft','hard'])
+
+
+class ColorMapper(QObject):
+    updated = Signal()
+
+    def __init__(self, cmap, norm):
+        super(ColorMapper, self).__init__()
+        self._cmap = cmap
+        self._norm = norm
+        self._default_scale = self._norm.soft
+
+    @property
+    def scale(self):
+        return self._norm.soft
+
+    @scale.setter
+    def scale(self, scale):
+        self._norm.soft = scale
+        self.updated.emit()
+
+    @property
+    def limits(self):
+        return self._norm.hard
+
+    def reset(self):
+        self.scale = self._default_scale
+
+    def ndarray_to_pixmap(self, ndarray):
+        return ndarray_to_pixmap(ndarray, self._cmap, self._norm)
+

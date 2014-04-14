@@ -1,5 +1,42 @@
-from PySide.QtCore import Qt
-from PySide.QtGui import QWidget, QSplitter, QHBoxLayout
+from PySide.QtCore import Qt, QObject, Signal
+from PySide.QtGui import QWidget, QSplitter, QSplitterHandle, QHBoxLayout
+
+
+class SplitterHandle(QSplitterHandle):
+    clicked = Signal()
+    
+    def __init__(self, *args, **kwargs):
+        super(SplitterHandle, self).__init__(*args, **kwargs)
+        self.mouse_pressed = False
+        self.mouse_moved = False
+
+    def mousePressEvent(self, ev):
+        super(SplitterHandle, self).mousePressEvent(ev)
+        self.mouse_pressed = True
+
+    def mouseMoveEvent(self, ev):
+        super(SplitterHandle, self).mouseMoveEvent(ev)
+        self.mouse_moved = True
+
+    def mouseReleaseEvent(self, ev):
+        super(SplitterHandle, self).mouseReleaseEvent(ev)
+        if self.mouse_pressed and not self.mouse_moved: 
+            self.clicked.emit()
+        self.mouse_pressed = False
+        self.mouse_moved = False
+
+
+class Splitter(QSplitter):
+    handle_clicked = Signal()
+
+    def __init__(self, orientation, parent):
+        super(Splitter, self).__init__(orientation, parent)
+
+    def createHandle(self):
+        print('createHandle')
+        handle = SplitterHandle(self.orientation(), self)
+        handle.clicked.connect(self.handle_clicked.emit)
+        return handle
 
 
 class CollapsiblePanel(QWidget):
@@ -32,7 +69,8 @@ class CollapsiblePanel(QWidget):
         else:
             panel.setFixedWidth(panel.width())
 
-        self._split = QSplitter(orientation, self)
+        self._split = Splitter(orientation, self)
+        self._split.handle_clicked.connect(self.toggle_collapsed)
         self.layout().addWidget(self._split, 1)
         if parent_first:
             self._split.addWidget(parent)
@@ -46,11 +84,25 @@ class CollapsiblePanel(QWidget):
         self._split.setStretchFactor(self._parentidx, 1)
         self._split.setStretchFactor(self._panelidx, 0)
 
+    def toggle_collapsed(self):
+        if self.is_collapsed():
+            self.uncollapse()
+        else:
+            self.collapse()
+
+    def is_collapsed(self):
+        size = self._split.sizes()
+        return size[self._panelidx] == 0
+
     def collapse(self):
-        self._split.setSizes([0,0])
+        sizes = self._split.sizes()
+        sizes[self._panelidx] = 0
+        self._split.setSizes(sizes)
     
     def uncollapse(self):
-        self._split.setSizes([1,1])
+        sizes = self._split.sizes()
+        sizes[self._panelidx] = 1
+        self._split.setSizes(sizes)
 
 
 if __name__ == '__main__':
