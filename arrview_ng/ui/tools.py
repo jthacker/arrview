@@ -1,4 +1,4 @@
-from PySide.QtCore import Qt
+from PySide.QtCore import Qt, Signal, QObject, QPointF
 from PySide.QtGui import QGraphicsView, QTransform
 
 from ..util import Scale, rep
@@ -17,12 +17,12 @@ class PanTool(object):
         if self.origin:
             vBar = graphics.verticalScrollBar()
             hBar = graphics.horizontalScrollBar()
-            ox,oy = self.origin
-            x,y = mouse.screen_pos
+            ox,oy = self.origin.x(), self.origin.y()
+            x,y = mouse.screen_pos.x(), mouse.screen_pos.y()
             dx,dy = x-ox,y-oy
             hBar.setValue(hBar.value() - dx)
             vBar.setValue(vBar.value() - dy)
-            self.origin = (x,y)
+            self.origin = mouse.screen_pos
 
     def mouse_release_event(self, graphics, mouse):
         if self.origin:
@@ -31,7 +31,7 @@ class PanTool(object):
 
 
 class ZoomTool(object):
-    def __init__(self, zoom_limits=Scale(0.1,20)):
+    def __init__(self, zoom_limits=Scale(0.01,50)):
         self.limits = zoom_limits
         self._scale = 1
 
@@ -53,3 +53,29 @@ class ZoomTool(object):
         s = 1.0 / self._scale
         graphics.scale(s,s)
         self._scale = 1
+
+
+class ArrayValueFromCursorTool(QObject):
+    status = Signal(dict)
+
+    def __init__(self, slicer):
+        super(ArrayValueFromCursorTool, self).__init__()
+        self.slicer = slicer
+
+    def mouse_move_event(self, graphics, mouse):
+        x,y = mouse.pos.x(), mouse.pos.y()
+        slc = list(self.slicer.slc)
+        xDim,yDim = self.slicer.slc.viewdims
+        slc[xDim], slc[yDim] = x,y
+        
+        view = self.slicer.view
+        shape = view.shape
+        xMax,yMax = shape[1],shape[0]
+
+        val = None
+        if 0 <= x < xMax and 0 <= y < yMax:
+            val = view[y,x]
+
+        self.status.emit({'slc': slc, 'val': val})
+
+        return False

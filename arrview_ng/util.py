@@ -7,17 +7,6 @@ from itertools import chain
 Scale = namedtuple('Scale', ['low','high'])
 
 
-class QPointFTuple(QPointF):
-    def __iter__(self):
-        return iter((self.x(), self.y()))
-
-
-class QPointTuple(QPoint):
-    def __iter__(self):
-        return iter((self.x(), self.y()))
-
-
-
 def unique(iterable):
     '''Returns true or false if the items in the iterable are unique'''
     return len(iterable) == len(set(iterable))

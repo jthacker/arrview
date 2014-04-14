@@ -1,7 +1,7 @@
 from PySide.QtCore import Qt, QObject, QEvent as QEV
 from PySide.QtGui import QGraphicsView, QWheelEvent
 
-from .util import Scale, rep, QPointFTuple, QPointTuple, toiterable
+from .util import Scale, rep, toiterable
 
 
 _qtmousebuttons = (Qt.LeftButton, Qt.MidButton, Qt.RightButton)
@@ -37,8 +37,8 @@ class GraphicsViewEventFilter(QObject):
         self.tools = { tool:tuple(toiterable(filters)) for tool,filters in tools.iteritems() }
         
     def convert_mouse_event(self, ev):
-        screen_pos = QPointTuple(ev.pos())
-        pos = QPointFTuple(self.graphicsview.screen_pos_to_pixmap_pos(screen_pos))
+        screen_pos = ev.pos()
+        pos = self.graphicsview.screen_pos_to_pixmap_pos(screen_pos)
         buttons = frozenset((b for b in _qtmousebuttons if ev.buttons() & b))
         delta = 0 if not isinstance(ev, QWheelEvent) else ev.delta()
         return MouseState(pos, screen_pos, buttons, delta)
@@ -49,7 +49,8 @@ class GraphicsViewEventFilter(QObject):
             for filter in filters:
                 if filter.matches(evtype, state):
                     handled = _event_map[evtype](tool)(self.graphicsview, state)
-                    return True
+                    if handled:
+                        return True
         return False
 
     def eventFilter(self, obj, ev):
