@@ -1,5 +1,5 @@
 from PySide.QtCore import Qt
-from PySide.QtGui import QSlider, QStyleOptionSlider, QStyle, QAbstractSlider
+from PySide.QtGui import QSlider, QStyleOptionSlider, QStyle, QAbstractSlider, QWidget, QHBoxLayout, QPushButton
 
 class Slider(QSlider):
     '''Allow the user to click near a tick mark and have the slider 
@@ -50,6 +50,30 @@ class Slider(QSlider):
             event.accept()
         else:
             super(Slider, self).mousePressEvent(event)
+
+
+class PlayableSlider(QWidget):
+    def __init__(self, *args, **kwargs):
+        super(PlayableSlider, self).__init__(*args, **kwargs)
+        self.setLayout(QHBoxLayout())
+
+        self.playIcon = self.style().standardIcon(QStyle.SP_MediaPlay)
+        self.pauseIcon = self.style().standardIcon(QStyle.SP_MediaPause)
+        self.playbutton = QPushButton()
+        self.playbutton.setIcon(self.playIcon)
+        self.layout().addWidget(self.playbutton)
+
+        self.slider = Slider(Qt.Horizontal)
+        self.slider.setPageStep(1)
+        self.slider.setTickPosition(QSlider.TicksAbove)
+        self.layout().addWidget(self.slider)
+
+    def set_slider_range(self, low, high):
+        self.slider.setRange(low, high)
+
+    def set_slider_value(self, val):
+        self.slider.setValue(val)
+
 
 
 if __name__ == '__main__':

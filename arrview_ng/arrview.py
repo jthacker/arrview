@@ -5,6 +5,7 @@ from . import colormap as cm
 from .slicer import Slicer
 from .ui.pixmapgraphicsview import PixmapGraphicsView
 from .ui.collapsiblepanel import CollapsiblePanel
+from .ui.slider import PlayableSlider
 from .ui.tools import PanTool, ZoomTool, ArrayValueFromCursorTool, ColorMapTool
 from .events import GraphicsViewEventFilter, MouseFilter
 
@@ -47,8 +48,10 @@ def view(arr):
 
     dim = QWidget()
     dim.setLayout(QHBoxLayout())
-    dim.layout().addWidget(QPushButton('Push Me'))
-    dim.layout().addWidget(QPushButton('No, push me!'))
+    slider = PlayableSlider()
+    slider.set_slider_range(0, 100)
+    slider.set_slider_value(10)
+    dim.layout().addWidget(slider)
 
     panel = CollapsiblePanel(main, dim, CollapsiblePanel.South, collapsed=True)
 
