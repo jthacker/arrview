@@ -1,11 +1,12 @@
 from PySide.QtCore import Qt, QObject, QEvent as QEV
-from PySide.QtGui import QWidget, QStatusBar, QPixmap
+from PySide.QtGui import QWidget, QStatusBar, QPixmap, QHBoxLayout, QVBoxLayout, QLabel
 
 from . import colormap as cm
 from .slicer import Slicer
 from .ui.pixmapgraphicsview import PixmapGraphicsView
 from .ui.collapsiblepanel import CollapsiblePanel
-from .ui.slider import PlayableSlider
+from .ui.dimeditor import SliceEditor
+from .ui.slider import SliderIntegerEditor
 from .ui.tools import PanTool, ZoomTool, ArrayValueFromCursorTool, ColorMapTool
 from .events import GraphicsViewEventFilter, MouseFilter
 
@@ -14,7 +15,13 @@ class ArrayView(object):
         self.slicer = Slicer(ndarray)
         self.cmap = cm.ColorMapper(cm.jet, cm.LinearNorm(*cm.autoscale(ndarray)))
         self.cmap.updated.connect(self.refresh)
+        self.sliceeditor = SliceEditor(self.slicer.slc)
+        self.sliceeditor.slice_changed.connect(self._slice_changed)
         self.graphics = None
+        self.refresh()
+
+    def _slice_changed(self, slc):
+        self.slicer.slc = slc
         self.refresh()
 
     def refresh(self):
@@ -25,52 +32,44 @@ class ArrayView(object):
             self.graphics.setPixmap(pixmap)
 
     def widget(self):
-        return self.graphics
+        sidebar = QWidget()
+        sidebar.setLayout(QHBoxLayout())
+        sidebar.layout().addWidget(QLabel('Sidebar'))
+
+        main = CollapsiblePanel(self.graphics, sidebar, CollapsiblePanel.East, collapsed=True)
+
+        return CollapsiblePanel(main, self.sliceeditor.widget, CollapsiblePanel.South, collapsed=True)
+
+    def set_tools(self, tools):
+        self.graphics.viewport().installEventFilter(GraphicsViewEventFilter(self.graphics, tools))
+
+
+def cursor_info(win, msg):
+    status = '(%s)' % ','.join('%03d' % i for i in msg['slc']) 
+    val = msg['val']
+    if val is not None:
+        status += ' %0.2f' % val
+    win.statusBar().showMessage(status)
 
 
 def view(arr):
     import sys
-    from PySide.QtGui import (QApplication, QMainWindow, QWidget, QPushButton,
-            QHBoxLayout, QLabel)
+    from PySide.QtGui import QApplication, QMainWindow
 
     app = QApplication.instance()
     if not app:
         app = QApplication(sys.argv)
- 
+
     arrview = ArrayView(arr)
     viewWidget = arrview.widget()
-   
-    sidebar = QWidget()
-    sidebar.setLayout(QHBoxLayout())
-    sidebar.layout().addWidget(QLabel('Sidebar'))
-
-    main = CollapsiblePanel(viewWidget, sidebar, CollapsiblePanel.East, collapsed=True)
-
-    dim = QWidget()
-    dim.setLayout(QHBoxLayout())
-    slider = PlayableSlider()
-    slider.set_slider_range(0, 100)
-    slider.set_slider_value(10)
-    dim.layout().addWidget(slider)
-
-    panel = CollapsiblePanel(main, dim, CollapsiblePanel.South, collapsed=True)
 
     win = QMainWindow()
-    win.setCentralWidget(panel)
+    win.setCentralWidget(viewWidget)
     win.setStatusBar(QStatusBar(win))
     win.resize(600,600)
-    win.show()
-    panel.collapse() 
+
     cursortool = ArrayValueFromCursorTool(arrview.slicer)
-
-    def cursor_info(msg):
-        status = '(%s)' % ','.join('%03d' % i for i in msg['slc']) 
-        val = msg['val']
-        if val is not None:
-            status += ' %0.2f' % val
-        win.statusBar().showMessage(status)
-
-    cursortool.status.connect(cursor_info)
+    cursortool.status.connect(lambda info: cursor_info(win, info))
 
     tools = {
         PanTool(): 
@@ -84,12 +83,12 @@ def view(arr):
         ColorMapTool(arrview):
             [ MouseFilter([QEV.MouseMove, QEV.MouseButtonPress, QEV.MouseButtonDblClick], buttons=Qt.RightButton)],
         }
-
-    viewWidget.viewport().installEventFilter(GraphicsViewEventFilter(viewWidget, tools))
+    arrview.set_tools(tools)
     
+    win.show()
     app.exec_()
 
 
 if __name__ == '__main__':
     import numpy as np
-    view(np.random.random((128,256,128)))
+    view(np.random.random((32,10,128,2,4)))

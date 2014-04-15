@@ -29,11 +29,7 @@ class SplitterHandle(QSplitterHandle):
 class Splitter(QSplitter):
     handle_clicked = Signal()
 
-    def __init__(self, orientation, parent):
-        super(Splitter, self).__init__(orientation, parent)
-
     def createHandle(self):
-        print('createHandle')
         handle = SplitterHandle(self.orientation(), self)
         handle.clicked.connect(self.handle_clicked.emit)
         return handle
@@ -64,10 +60,10 @@ class CollapsiblePanel(QWidget):
 
     def _init_panel(self, parent, panel, orientation, parent_first):
         panel.adjustSize()
-        if orientation == Qt.Vertical:
-            panel.setFixedHeight(panel.height())
-        else:
-            panel.setFixedWidth(panel.width())
+        #if orientation == Qt.Vertical:
+        #    panel.setFixedHeight(panel.height())
+        #else:
+        #    panel.setFixedWidth(panel.width())
 
         self._split = Splitter(orientation, self)
         self._split.handle_clicked.connect(self.toggle_collapsed)
