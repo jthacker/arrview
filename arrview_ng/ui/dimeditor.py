@@ -81,7 +81,7 @@ class DimOrderWidget(QWidget):
 
         self.dimlist = dimlist
         self.setStyleSheet(
-                'QLabel { qproperty-alignment: AlignCenter; } '
+                'QLabel { qproperty-alignment: AlignCenter; color: rgb(50,50,50); } '
                 'DraggableLabel { border: 1px solid; } ')
 
     def _init_horizontal(self, dimlist, slc, disp):
@@ -95,7 +95,7 @@ class DimOrderWidget(QWidget):
         header.layout().addWidget(QLabel('len'))
         header.layout().addWidget(QLabel('slc'))
         header.layout().addWidget(QLabel('view'))
-        header.setStyleSheet('QLabel { qproperty-alignment: AlignRight | AlignVCenter; }')
+        header.setStyleSheet("QLabel { qproperty-alignment: 'AlignVCenter | AlignRight'; }")
         box.addWidget(header)
 
         cols = []
