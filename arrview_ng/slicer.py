@@ -4,10 +4,14 @@ from .util import unique, rep
 
 
 class SliceTuple(tuple):
-    def __init__(self, *args, **kwargs):
-        super(SliceTuple, self).__init__(*args, **kwargs)
+    def __new__(cls, iterable, shape):
+        return super(SliceTuple, cls).__new__(cls, iterable)
+
+    def __init__(self, iterable, shape):
+        super(SliceTuple, self).__init__(iterable)
         self._xdim = self.index('x')
         self._ydim = self.index('y')
+        self._shape = shape
 
     @property
     def xdim(self):
@@ -17,6 +21,10 @@ class SliceTuple(tuple):
     def ydim(self):
         return self._ydim
    
+    @property
+    def shape(self):
+        return self._shape
+
     @property
     def viewdims(self):
         return (self.xdim, self.ydim)
@@ -98,6 +106,45 @@ class SliceTuple(tuple):
         slc[xdim],slc[ydim] = 'x','y'
         return SliceTuple(slc)
 
+    def set_viewdims(self, xdim, ydim):
+        '''Select a 2D view from the higher dimension array.
+        View dims are swapped if xDim > yDim'''
+        assert 0 <= xdim < len(self)
+        assert 0 <= ydim < len(self)
+        
+        slc = list(self)
+        slc[self.xdim] = 0
+        slc[self.ydim] = 0
+        slc[xdim] = 'x'
+        slc[ydim] = 'y'
+        return SliceTuple(slc, self.shape)
+
+    def set_freedim(self, dim, val):
+        '''Set the dimension dim to the value val.
+        This method allows for easy updating of the 2D view on one of the
+        free dimensions. It also verifies that dim is not bigger than
+        the dimension of the array and that val is within the range of the
+        dimension selected by dim.
+
+        If val is outside the bounds of the dimension selected by dim, then it will
+        be anchored autmatically to either 0 or max of the dimension range depending
+        on which one it is closer to.
+        '''
+        assert 0 <= dim < len(self), 'Dim [%d] must be in [0,%d)' % (dim, len(self))
+
+        xdim,ydim = self.viewdims
+        if dim != xdim and dim != ydim:
+            dMax = self.shape[dim]
+            if val >= dMax:
+                val = dMax - 1
+            if val < 0:
+                val = 0
+            slc = list(self)
+            slc[dim] = val
+            return SliceTuple(slc, self.shape)
+        else:
+            return self
+
 
 class Slicer(object):
     def __init__(self, arr, xdim=1, ydim=0):
@@ -106,12 +153,10 @@ class Slicer(object):
         assert arr.ndim >= 2, 'arr must be at least 2 dimensions'
         assert xdim != ydim, 'diminsion x must be different from y'
         self._arr = arr
-        self._set_dims([0]*self.ndim, xdim, ydim)
-
-    def _set_dims(self, slc, xdim, ydim):
+        slc = [0]*self.ndim
         slc[xdim] = 'x'
         slc[ydim] = 'y'
-        self.slc = SliceTuple(slc)
+        self.slc = SliceTuple(slc, arr.shape)
 
     @property
     def ndim(self):
@@ -129,41 +174,6 @@ class Slicer(object):
     def view(self):
         '''Get the current view of the array'''
         return self.slc.viewarray(self.arr)
-
-    def set_viewdims(self, xdim, ydim):
-        '''Select a 2D view from the higher dimension array.
-        View dims are swapped if xDim > yDim'''
-        assert 0 <= xdim < self.ndim
-        assert 0 <= ydim < self.ndim
-        
-        slc = list(self.slc)
-        slc[self.slc.xdim] = 0
-        slc[self.slc.ydim] = 0
-        self._set_dims(slc, xdim, ydim)
-
-    def set_freedim(self, dim, val):
-        '''Set the dimension dim to the value val.
-        This method allows for easy updating of the 2D view on one of the
-        free dimensions. It also verifies that dim is not bigger than
-        the dimension of the array and that val is within the range of the
-        dimension selected by dim.
-
-        If val is outside the bounds of the dimension selected by dim, then it will
-        be anchored autmatically to either 0 or max of the dimension range depending
-        on which one it is closer to.
-        '''
-        assert 0 <= dim < self.ndim, 'Dim [%d] must be in [0,%d)' % (dim, self.ndim)
-
-        xdim,ydim = self.slc.viewdims
-        if dim != xdim and dim != ydim:
-            dMax = self.shape[dim]
-            if val >= dMax:
-                val = dMax - 1
-            if val < 0:
-                val = 0
-            slc = list(self.slc)
-            slc[dim] = val
-            self.slc = SliceTuple(slc)
 
     def __repr__(self):
         return rep(self, ['arr','slc'])
