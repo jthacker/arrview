@@ -31,7 +31,7 @@ class PanTool(object):
 
 
 class ZoomTool(object):
-    def __init__(self, zoom_limits=Scale(0.01,50)):
+    def __init__(self, zoom_limits=Scale(0.1,50)):
         self.limits = zoom_limits
         self._scale = 1
 
@@ -50,9 +50,8 @@ class ZoomTool(object):
             self._scale *= s
 
     def mouse_double_click_event(self, graphics, mouse):
-        s = 1.0 / self._scale
-        graphics.scale(s,s)
         self._scale = 1
+        graphics.fitView()
 
 
 class ArrayValueFromCursorTool(QObject):
