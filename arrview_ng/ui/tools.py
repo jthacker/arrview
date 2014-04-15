@@ -55,7 +55,7 @@ class ZoomTool(object):
 
 
 class ArrayValueFromCursorTool(QObject):
-    status = Signal(dict)
+    status_changed = Signal(dict)
 
     def __init__(self, slicer):
         super(ArrayValueFromCursorTool, self).__init__()
@@ -75,8 +75,7 @@ class ArrayValueFromCursorTool(QObject):
         if 0 <= x < xMax and 0 <= y < yMax:
             val = view[y,x]
 
-        self.status.emit({'slc': slc, 'val': val})
-
+        self.status_changed.emit({'slc': slc, 'val': val})
         return False
 
 

@@ -69,7 +69,7 @@ def view(arr):
     win.resize(600,600)
 
     cursortool = ArrayValueFromCursorTool(arrview.slicer)
-    cursortool.status.connect(lambda info: cursor_info(win, info))
+    cursortool.status_changed.connect(lambda info: cursor_info(win, info))
 
     tools = {
         PanTool(): 
