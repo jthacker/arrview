@@ -104,4 +104,5 @@ class ColorMapTool(object):
             self.arrview.cmap.scale = Scale(vmin, vmax)
 
     def mouse_double_click_event(self, graphics, mouse):
+        self.origin = None
         self.arrview.cmap.reset()
