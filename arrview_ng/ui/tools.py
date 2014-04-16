@@ -8,26 +8,27 @@ class PanTool(object):
         self.origin = None
         self.prev_cursor = None
 
-    def mouse_press_event(self, graphics, mouse):
-        self.origin = mouse.screen_pos
-        self.prev_cursor = graphics.cursor()
-        graphics.setCursor(Qt.ClosedHandCursor)
+    def mouse_press_event(self, ev):
+        self.origin = ev.mouse.screen_pos
+        self.prev_cursor = ev.graphics.cursor()
+        ev.graphics.setCursor(Qt.ClosedHandCursor)
     
-    def mouse_move_event(self, graphics, mouse):
+    def mouse_move_event(self, ev):
         if self.origin:
-            vBar = graphics.verticalScrollBar()
-            hBar = graphics.horizontalScrollBar()
+            vBar = ev.graphics.verticalScrollBar()
+            hBar = ev.graphics.horizontalScrollBar()
             ox,oy = self.origin.x(), self.origin.y()
-            x,y = mouse.screen_pos.x(), mouse.screen_pos.y()
+            x,y = ev.mouse.screen_pos.x(), ev.mouse.screen_pos.y()
             dx,dy = x-ox,y-oy
             hBar.setValue(hBar.value() - dx)
             vBar.setValue(vBar.value() - dy)
-            self.origin = mouse.screen_pos
+            self.origin = ev.mouse.screen_pos
 
-    def mouse_release_event(self, graphics, mouse):
+    def mouse_release_event(self, ev):
+        print('pan tool', 'mouse released', ev.mouse)
         if self.origin:
             self.origin = None
-            graphics.setCursor(self.prev_cursor)
+            ev.graphics.setCursor(self.prev_cursor)
 
 
 class ZoomTool(object):
@@ -38,20 +39,20 @@ class ZoomTool(object):
     def attach_event(self, graphics):
         graphics.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
 
-    def mouse_wheel_event(self, graphics, mouse):
-        scale = graphics.transform().m11()
-        zoomin = mouse.wheel_delta < 0
+    def mouse_wheel_event(self, ev):
+        scale = ev.graphics.transform().m11()
+        zoomin = ev.mouse.wheel_delta < 0
         zoomout = not zoomin
         above_min = scale >= self.limits.low
         below_max = scale < self.limits.high
         if (zoomout and above_min) or (zoomin and below_max):
             s = 1.2 if zoomin else 1/1.2
-            graphics.scale(s,s)
+            ev.graphics.scale(s,s)
             self._scale *= s
 
-    def mouse_double_click_event(self, graphics, mouse):
+    def mouse_double_click_event(self, ev):
         self._scale = 1
-        graphics.fitView()
+        ev.graphics.fitView()
 
 
 class ArrayValueFromCursorTool(QObject):
@@ -61,8 +62,8 @@ class ArrayValueFromCursorTool(QObject):
         super(ArrayValueFromCursorTool, self).__init__()
         self.slicer = slicer
 
-    def mouse_move_event(self, graphics, mouse):
-        x,y = mouse.pos.x(), mouse.pos.y()
+    def mouse_move_event(self, ev):
+        x,y = ev.mouse.pos.x(), ev.mouse.pos.y()
         slc = list(self.slicer.slc)
         xDim,yDim = self.slicer.slc.viewdims
         slc[xDim], slc[yDim] = x,y
@@ -84,15 +85,15 @@ class ColorMapTool(object):
         self.origin = None
         self.arrview = arrview
 
-    def mouse_press_event(self, graphics, mouse):
-        self.origin = mouse.screen_pos
+    def mouse_press_event(self, ev):
+        self.origin = ev.mouse.screen_pos
         vmin,vmax = self.arrview.cmap.scale
         self.iwidth = vmax - vmin
         self.icenter = (vmax - vmin) / 2.0 + vmin
 
-    def mouse_move_event(self, graphics, mouse):
+    def mouse_move_event(self, ev):
         if self.origin is not None:
-            pos = mouse.screen_pos
+            pos = ev.mouse.screen_pos
             low,high = self.arrview.cmap.limits
 
             scale = lambda dw: 0.001 * (high - low) * dw
@@ -102,6 +103,6 @@ class ColorMapTool(object):
             vmax = clamp(center + halfwidth, low, high)
             self.arrview.cmap.scale = Scale(vmin, vmax)
 
-    def mouse_double_click_event(self, graphics, mouse):
+    def mouse_double_click_event(self, ev):
         self.origin = None
         self.arrview.cmap.reset()

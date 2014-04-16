@@ -1,8 +1,8 @@
 from PySide.QtCore import Qt, QObject, QEvent as QEV
 from PySide.QtGui import QGraphicsView, QWheelEvent
 
+from collections import namedtuple
 from .util import Scale, rep, toiterable
-
 
 _qtmousebuttons = (Qt.LeftButton, Qt.MidButton, Qt.RightButton)
 _mouse_events = { QEV.MouseMove, QEV.MouseButtonPress, QEV.MouseButtonRelease,
@@ -15,6 +15,7 @@ _event_map = {
         QEV.MouseButtonDblClick: lambda o: o.mouse_double_click_event,
         QEV.Wheel: lambda o: o.mouse_wheel_event }
 
+MouseEvent = namedtuple('MouseEvent',['graphics', 'mouse'])
 
 class MouseState(object):
     def __init__(self, pos, screen_pos, buttons, wheel_delta):
@@ -28,43 +29,57 @@ class MouseState(object):
 
 
 class GraphicsViewEventFilter(QObject):
-    def __init__(self, graphicsview, tools=None):
+    def __init__(self, graphicsview, tools=tuple()):
         super(GraphicsViewEventFilter, self).__init__(parent=graphicsview)
         self.graphicsview = graphicsview
-        for tool in tools.iterkeys():
-            if hasattr(tool, 'attach_event'):
-                tool.attach_event(graphicsview)
-        self.tools = { tool:tuple(toiterable(filters)) for tool,filters in tools.iteritems() }
-        
+        self.tools = {}
+        for tool,filters in tools:
+            self.add_tool(tool, filters)
+    
+    def add_tool(self, tool, filters):
+        self.tools[tool] = tuple(toiterable(filters))
+        if tool not in self.tools and hasattr(tool, 'attach_event'):
+            tool.attach_event(self.graphicsview)
+
+    def remove_tool(self, tool):
+        if self.tools.pop(tool, None):
+            if hasattr(tool, 'detach_event'):
+                tool.detach_event(self.graphicsview)
+
     def convert_mouse_event(self, ev):
         screen_pos = ev.pos()
         pos = self.graphicsview.screen_pos_to_pixmap_pos(screen_pos)
-        buttons = frozenset((b for b in _qtmousebuttons if ev.buttons() & b))
-        delta = 0 if not isinstance(ev, QWheelEvent) else ev.delta()
+        if isinstance(ev, QWheelEvent):
+            delta = ev.delta()
+            buttons = frozenset()
+        else:
+            delta = 0
+            buttons = frozenset((b for b in _qtmousebuttons if (ev.buttons() & b) or (ev.button()==b)))
         return MouseState(pos, screen_pos, buttons, delta)
-
-    def filter(self, evtype, state):
-        '''Return True when the event should not propogate any further'''
-        for tool,filters in self.tools.iteritems():
-            for filter in filters:
-                if filter.matches(evtype, state):
-                    handled = _event_map[evtype](tool)(self.graphicsview, state)
-                    if handled:
-                        return True
-        return False
 
     def eventFilter(self, obj, ev):
         eventtype = ev.type()
         state = None
+        event = None
         if eventtype in _mouse_events:
             state = self.convert_mouse_event(ev)
+            event = MouseEvent(self.graphicsview, state)
         elif eventtype in _key_events:
             state = self.convert_key_event(ev)
-
+            event = KeyEvent(state)
         if state is None:
             return super(GraphicsViewEventFilter, self).eventFilter(obj, ev)
+        return self.filter(eventtype, event, state)
 
-        return self.filter(eventtype, state)
+    def filter(self, evtype, event, state):
+        '''Return True when the event should not propogate any further'''
+        for tool,filters in self.tools.iteritems():
+            for filter in filters:
+                if filter.matches(evtype, state):
+                    handled = _event_map[evtype](tool)(event)
+                    if handled:
+                        return True
+        return False
 
 
 class Filter(object):

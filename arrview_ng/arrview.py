@@ -1,47 +1,59 @@
-from PySide.QtCore import Qt, QObject, QEvent as QEV
+from PySide.QtCore import Qt, QObject, QEvent as QEV, Signal
 from PySide.QtGui import QWidget, QStatusBar, QPixmap, QHBoxLayout, QVBoxLayout, QLabel
+
+from collections import OrderedDict
 
 from . import colormap as cm
 from .slicer import Slicer
 from .ui.pixmapgraphicsview import PixmapGraphicsView
 from .ui.collapsiblepanel import CollapsiblePanel
 from .ui.dimeditor import SliceEditor
+from .ui.roi import ROIPanel
 from .ui.slider import SliderIntegerEditor
 from .ui.tools import PanTool, ZoomTool, ArrayValueFromCursorTool, ColorMapTool
 from .events import GraphicsViewEventFilter, MouseFilter
 
-class ArrayView(object):
+class ArrayView(QObject):
+    refreshed = Signal()
+    tool_added = Signal(object, object)
+    tool_removed = Signal(object)
+
     def __init__(self, ndarray):
+        super(ArrayView, self).__init__()
         self.slicer = Slicer(ndarray)
         self.cmap = cm.ColorMapper(cm.jet, cm.LinearNorm(*cm.autoscale(ndarray)))
-        self.cmap.updated.connect(self.refresh)
+        self.cmap.updated.connect(self.refreshed.emit)
         self.sliceeditor = SliceEditor(self.slicer.slc)
         self.sliceeditor.slice_changed.connect(self._slice_changed)
-        self.graphics = None
-        self.refresh()
+        self.roipanel = ROIPanel()
+        self.tools = OrderedDict()
 
     def _slice_changed(self, slc):
         self.slicer.slc = slc
-        self.refresh()
-
-    def refresh(self):
-        pixmap = self.cmap.ndarray_to_pixmap(self.slicer.view)
-        if self.graphics is None:
-            self.graphics = PixmapGraphicsView(pixmap)
-        else:
-            self.graphics.setPixmap(pixmap)
+        self.refreshed.emit()
 
     def widget(self):
+        graphics = PixmapGraphicsView(self.cmap.ndarray_to_pixmap(self.slicer.view))
+        evf = GraphicsViewEventFilter(graphics, self.tools.iteritems())
+        self.tool_added.connect(evf.add_tool)
+        self.tool_removed.connect(evf.remove_tool)
+        graphics.viewport().installEventFilter(evf)
+        self.refreshed.connect(lambda: graphics.setPixmap(self.cmap.ndarray_to_pixmap(self.slicer.view)))
+
         sidebar = QWidget()
-        sidebar.setLayout(QHBoxLayout())
+        sidebar.setLayout(QVBoxLayout())
         sidebar.layout().addWidget(QLabel('Sidebar'))
+        sidebar.layout().addWidget(self.roipanel.widget())
+        main = CollapsiblePanel(graphics, sidebar, CollapsiblePanel.East, collapsed=True)
+        return CollapsiblePanel(main, self.sliceeditor.widget(), CollapsiblePanel.South, collapsed=True)
 
-        main = CollapsiblePanel(self.graphics, sidebar, CollapsiblePanel.East, collapsed=True)
+    def add_tool(self, tool, filters):
+        self.tools[tool] = filters
+        self.tool_added.emit(tool, filters)
 
-        return CollapsiblePanel(main, self.sliceeditor.widget, CollapsiblePanel.South, collapsed=True)
-
-    def set_tools(self, tools):
-        self.graphics.viewport().installEventFilter(GraphicsViewEventFilter(self.graphics, tools))
+    def remove_tool(self, tool):
+        if self.tools.pop(tool, None):
+            self.tool_removed.emit(tool) 
 
 
 def cursor_info(display_widget, info):
@@ -51,10 +63,12 @@ def cursor_info(display_widget, info):
         status += ' %0.2f' % val
     display_widget.setText(status)
 
+
 def colormap_info(display_widget, cmap):
     fmt = lambda scale: '[%s]' % ','.join('%0.1f' % x for x in scale)
     status = fmt(cmap.scale) + ' ' + fmt(cmap.limits)
     display_widget.setText(status)
+
 
 def view(arr):
     import sys
@@ -75,30 +89,30 @@ def view(arr):
     colormap_info(colormap_info_widget, arrview.cmap)
     arrview.cmap.updated.connect(lambda: colormap_info(colormap_info_widget, arrview.cmap))
 
+    arrview.add_tool(PanTool(),
+            MouseFilter([QEV.MouseMove, QEV.MouseButtonPress, QEV.MouseButtonRelease], buttons=Qt.LeftButton))
+    arrview.add_tool(ZoomTool(), [ MouseFilter(QEV.MouseButtonDblClick, buttons=Qt.MiddleButton),
+            MouseFilter(QEV.Wheel) ])
+    arrview.add_tool(ColorMapTool(arrview), 
+            MouseFilter([QEV.MouseMove, QEV.MouseButtonPress, QEV.MouseButtonDblClick], buttons=Qt.RightButton))
+    arrview.add_tool(cursortool,MouseFilter(QEV.MouseMove))
+    
     win = QMainWindow()
     win.setCentralWidget(viewWidget)
-    win.setStatusBar(QStatusBar(win))
+    win.setStatusBar(QStatusBar())
     win.statusBar().addWidget(cursor_info_widget, 0)
     win.statusBar().addWidget(QWidget(), 1)
     win.statusBar().addWidget(colormap_info_widget, 0)
     win.resize(600,600)
-    
-
-    tools = {
-        PanTool(): 
-            [ MouseFilter([QEV.MouseMove, QEV.MouseButtonPress], buttons=Qt.LeftButton),
-              MouseFilter(QEV.MouseButtonRelease) ],
-        ZoomTool():
-            [ MouseFilter(QEV.MouseButtonDblClick, buttons=Qt.MiddleButton),
-              MouseFilter(QEV.Wheel) ],
-        cursortool:
-            [ MouseFilter(QEV.MouseMove) ],
-        ColorMapTool(arrview):
-            [ MouseFilter([QEV.MouseMove, QEV.MouseButtonPress, QEV.MouseButtonDblClick], buttons=Qt.RightButton)],
-        }
-    arrview.set_tools(tools)
-    
     win.show()
+    
+    viewWidget2 = arrview.widget()
+    win2 = QMainWindow()
+    win2.setCentralWidget(viewWidget2)
+    win2.setStatusBar(QStatusBar())
+    win2.resize(600,600)
+    win2.show()
+
     app.exec_()
 
 
