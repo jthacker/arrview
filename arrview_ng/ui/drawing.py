@@ -1,5 +1,6 @@
 from PySide.QtCore import Qt, QRectF
-from PySide.QtGui import QGraphicsPixmapItem, QPixmap, QPainter
+from PySide.QtGui import (QGraphicsPixmapItem, QPixmap, QPainter,
+        QGraphicsItem)
 
 import skimage as ski
 import skimage.draw
@@ -11,6 +12,7 @@ class PaintBrushItem(QGraphicsItem):
         super(PaintBrushItem, self).__init__()
         self._color = Qt.black
         self._points = []
+        self._connect_points = True
         self.set_radius(0)
 
     def set_color(self, color):
