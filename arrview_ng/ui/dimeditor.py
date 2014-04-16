@@ -99,7 +99,7 @@ class DimOrderWidget(QWidget):
         box.addWidget(header)
 
         cols = []
-        for i,l in enumerate(self.labels):
+        for i,l in enumerate(self.labels):   
             col = QWidget()
             layout = QVBoxLayout()
             layout.setSpacing(0)
@@ -174,78 +174,80 @@ def _disp(name, color_map=_color_map):
 
 class SliceEditor(QObject):
     slice_changed = Signal(object)
+    view_changed = Signal(object)
     freedim_names = ('z', 't')
 
     def __init__(self, slc):
         super(SliceEditor, self).__init__()
-        dimlist = self._slc_to_dimlist(slc)
+        self._slc = slc
+        self._dimlist = self._init_dimlist(slc)
+        self._freedim_editors = self._init_freedim_editors()
+        self._update_freedim_editors(self._dimlist)
 
-        self.dimorder = DimOrderWidget(dimlist, slc, disp=_disp)
-        self.dimorder.order_changed.connect(self._order_changed)
-      
-        self.slc = slc
-        self.freedims = OrderedDict([(name,self._create_freedim(name)) for name in self.freedim_names])
-        self._update_freedims(dimlist)
-        for name in set(self.freedim_names) - set(self._dim_map.keys()):
-            self.freedims[name].setDisable(True)
-        
+    def _init_dimlist(self, slc):
+        dimlist = [d if i in slc.viewdims else None for i,d in enumerate(slc)]
+        for fd,name in zip(slc.freedims, SliceEditor.freedim_names):
+            dimlist[fd] = name
+        return dimlist
+
+    def _init_freedim_editors(self):
+        editors = OrderedDict()
+        for name in SliceEditor.freedim_names:
+            editor = SliderIntegerEditor(0,0,0)
+            editor.value_changed.connect(lambda val, name=name: self._freedim_value_changed(name, val))
+            editors[name] = editor
+        return editors
+   
+    def _update_freedim_editors(self, dimlist):
+        freedims = ((name,d) for d,name in enumerate(dimlist) if name in SliceEditor.freedim_names)
+        for name,d in freedims:
+            editor = self._freedim_editors[name]
+            editor.range = (0, self.slc.shape[d]-1)
+            editor.value = self.slc[d]
+
+    def _freedim_value_changed(self, name, val):
+        dim = self._dimlist.index(name)
+        self._slc = self.slc.set_freedim(dim, val)
+        self.slice_changed.emit(self._slc)
+
+    def _vieworder_changed(self, dimlist):
+        self._dimlist = dimlist
+        self._slc = self.slc.set_viewdims(dimlist.index('x'), dimlist.index('y'))
+        self._update_freedim_editors(dimlist)
+        self.view_changed.emit(dimlist)
+        self.slice_changed.emit(self._slc)
+
+    def widget(self):
+        dimorder = DimOrderWidget(self._dimlist, self.slc, disp=_disp)
+        dimorder.order_changed.connect(self._vieworder_changed)
+        self.slice_changed.connect(dimorder.update_slc)
+        self.view_changed.connect(dimorder.setState)
+
         fd_widgets = QWidget()
         fd_widgets.setLayout(QVBoxLayout())
-        for name,fd in self.freedims.items():
+        for name,editor in self._freedim_editors.iteritems():
             row = QWidget()
             row.setLayout(QHBoxLayout())
             row.layout().setContentsMargins(0,0,0,0)
             row.layout().addWidget(QLabel(_disp(name)))
-            row.layout().addWidget(fd.widget)
+            row.layout().addWidget(editor.widget())
             fd_widgets.layout().addWidget(row)
 
         line = QFrame()
         line.setFrameShape(QFrame.VLine)
         line.setFrameShadow(QFrame.Sunken)
 
-        self.widget = QWidget()
-        self.widget.setLayout(QHBoxLayout())
-        self.widget.layout().setContentsMargins(0,0,0,0)
-        self.widget.layout().addWidget(self.dimorder)
-        self.widget.layout().addWidget(line)
-        self.widget.layout().addWidget(fd_widgets)
-
-    def _create_freedim(self, name):
-        editor = SliderIntegerEditor(0,0,0)
-        editor.value_changed.connect(lambda val, name=name: self._freedim_value_changed(name, val))
-        return editor
-
-    def _freedim_value_changed(self, name, val):
-        dim = self._dim_map[name]
-        self.slc = self.slc.set_freedim(dim, val)
-
-    def _update_freedims(self, dimlist):
-        self._dim_map = {name:d for d,name in enumerate(dimlist) if name is not None}
-        for name,d in self._dim_map.items():
-            if name in self.freedim_names:
-                freedim = self.freedims[name]
-                freedim.range = (0, self.slc.shape[d]-1)
-                freedim.value = self.slc[d]
-        
-    def _slc_to_dimlist(self, slc):
-        dims = [d if i in slc.viewdims else None for i,d in enumerate(slc)]
-        for fd,name in zip(slc.freedims, self.freedim_names):
-            dims[fd] = name
-        return dims
-
-    def _order_changed(self, dimlist):
-        self.slc = self.slc.set_viewdims(dimlist.index('x'), dimlist.index('y'))
-        self._update_freedims(dimlist)
+        widget = QWidget()
+        widget.setLayout(QHBoxLayout())
+        widget.layout().setContentsMargins(0,0,0,0)
+        widget.layout().addWidget(dimorder)
+        widget.layout().addWidget(line)
+        widget.layout().addWidget(fd_widgets)
+        return widget
 
     @property
     def slc(self):
         return self._slc
-
-    @slc.setter
-    def slc(self, slc):
-        self._slc = slc
-        self.dimorder.update_slc(slc)
-        self.slice_changed.emit(slc)
 
 
 ## Quick Test ##
