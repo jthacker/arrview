@@ -463,22 +463,21 @@ class _ZoomTool(GraphicsTool):
     def init(self):
         self.graphics.setTransformationAnchor(
                 QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-        self.currentScale = 1
+        self._default_scale = self.graphics.transform().m11()
 
     def mouse_wheeled(self):
+        currentScale = self.graphics.transform().m11()
         zoomIn = self.mouse.delta < 0
         s = 1.2 if zoomIn else 1/1.2
-        lessThanMax = zoomIn and self.currentScale < 20
-        greaterThanMin = not zoomIn and self.currentScale > 0.1
+        lessThanMax = zoomIn and currentScale < 20
+        greaterThanMin = not zoomIn and currentScale > 0.1
         if lessThanMax or greaterThanMin:
             self.graphics.scale(s,s)
-            self.currentScale *= s
 
     def mouse_double_clicked(self):
         if self.mouse.buttons.middle:
-            s = 1.0 / self.currentScale
+            s = self._default_scale
             self.graphics.scale(s,s)
-            self.currentScale = 1
 
 
 class ZoomTool(GraphicsToolFactory):
