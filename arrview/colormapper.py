@@ -80,9 +80,6 @@ class Norm(HasTraits):
         self.vmin = bins[np.argmax(cdf > 0.05)]
         self.vmax = bins[np.argmin(cdf < 0.95)]
         self.low,self.high = float(arr.min()), float(arr.max())
-        if self.vmin == self.vmax:
-            self.vmin = self.low
-            self.vmax = self.high
         self._scaled = True
 
     def normalize(self, ndarray):

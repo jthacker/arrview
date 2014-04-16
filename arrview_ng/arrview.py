@@ -44,13 +44,17 @@ class ArrayView(object):
         self.graphics.viewport().installEventFilter(GraphicsViewEventFilter(self.graphics, tools))
 
 
-def cursor_info(win, msg):
-    status = '(%s)' % ','.join('%03d' % i for i in msg['slc']) 
-    val = msg['val']
+def cursor_info(display_widget, info):
+    status = '(%s)' % ','.join('%03d' % i for i in info['slc']) 
+    val = info['val']
     if val is not None:
         status += ' %0.2f' % val
-    win.statusBar().showMessage(status)
+    display_widget.setText(status)
 
+def colormap_info(display_widget, cmap):
+    fmt = lambda scale: '[%s]' % ','.join('%0.1f' % x for x in scale)
+    status = fmt(cmap.scale) + ' ' + fmt(cmap.limits)
+    display_widget.setText(status)
 
 def view(arr):
     import sys
@@ -63,13 +67,22 @@ def view(arr):
     arrview = ArrayView(arr)
     viewWidget = arrview.widget()
 
+    cursor_info_widget = QLabel()
+    cursortool = ArrayValueFromCursorTool(arrview.slicer)
+    cursortool.status_changed.connect(lambda info: cursor_info(cursor_info_widget, info))
+
+    colormap_info_widget = QLabel()
+    colormap_info(colormap_info_widget, arrview.cmap)
+    arrview.cmap.updated.connect(lambda: colormap_info(colormap_info_widget, arrview.cmap))
+
     win = QMainWindow()
     win.setCentralWidget(viewWidget)
     win.setStatusBar(QStatusBar(win))
+    win.statusBar().addWidget(cursor_info_widget, 0)
+    win.statusBar().addWidget(QWidget(), 1)
+    win.statusBar().addWidget(colormap_info_widget, 0)
     win.resize(600,600)
-
-    cursortool = ArrayValueFromCursorTool(arrview.slicer)
-    cursortool.status_changed.connect(lambda info: cursor_info(win, info))
+    
 
     tools = {
         PanTool(): 
