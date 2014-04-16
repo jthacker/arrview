@@ -32,19 +32,23 @@ class GraphicsViewEventFilter(QObject):
     def __init__(self, graphicsview, tools=tuple()):
         super(GraphicsViewEventFilter, self).__init__(parent=graphicsview)
         self.graphicsview = graphicsview
-        self.tools = {}
+        self.tools = []
         for tool,filters in tools:
             self.add_tool(tool, filters)
-    
+   
     def add_tool(self, tool, filters):
-        self.tools[tool] = tuple(toiterable(filters))
-        if tool not in self.tools and hasattr(tool, 'attach_event'):
+        if not filter(lambda tf: tf[0]==tool, self.tools) and hasattr(tool, 'attach_event'):
             tool.attach_event(self.graphicsview)
+        self.tools.insert(0, (tool, tuple(toiterable(filters))))
 
     def remove_tool(self, tool):
-        if self.tools.pop(tool, None):
+        tfs = filter(lambda tf: tf[0]==tool, self.tools)
+        assert len(tfs) <= 1, 'There should be no duplicates in self.tools'
+        if len(tfs) == 1:
+            tool,filters = tfs[0]
             if hasattr(tool, 'detach_event'):
                 tool.detach_event(self.graphicsview)
+            self.tools.remove(tool)
 
     def convert_mouse_event(self, ev):
         screen_pos = ev.pos()
@@ -73,7 +77,7 @@ class GraphicsViewEventFilter(QObject):
 
     def filter(self, evtype, event, state):
         '''Return True when the event should not propogate any further'''
-        for tool,filters in self.tools.iteritems():
+        for tool,filters in self.tools:
             for filter in filters:
                 if filter.matches(evtype, state):
                     handled = _event_map[evtype](tool)(event)

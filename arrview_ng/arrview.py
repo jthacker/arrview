@@ -25,7 +25,7 @@ class ArrayView(QObject):
         self.cmap.updated.connect(self.refreshed.emit)
         self.sliceeditor = SliceEditor(self.slicer.slc)
         self.sliceeditor.slice_changed.connect(self._slice_changed)
-        self.roipanel = ROIPanel()
+        self.roipanel = ROIPanel(self)
         self.tools = OrderedDict()
 
     def _slice_changed(self, slc):
@@ -44,7 +44,7 @@ class ArrayView(QObject):
         sidebar.setLayout(QVBoxLayout())
         sidebar.layout().addWidget(QLabel('Sidebar'))
         sidebar.layout().addWidget(self.roipanel.widget())
-        main = CollapsiblePanel(graphics, sidebar, CollapsiblePanel.East, collapsed=True)
+        main = CollapsiblePanel(graphics, sidebar, CollapsiblePanel.East, collapsed=False)
         return CollapsiblePanel(main, self.sliceeditor.widget(), CollapsiblePanel.South, collapsed=True)
 
     def add_tool(self, tool, filters):
@@ -106,16 +106,9 @@ def view(arr):
     win.resize(600,600)
     win.show()
     
-    viewWidget2 = arrview.widget()
-    win2 = QMainWindow()
-    win2.setCentralWidget(viewWidget2)
-    win2.setStatusBar(QStatusBar())
-    win2.resize(600,600)
-    win2.show()
-
     app.exec_()
 
 
 if __name__ == '__main__':
     import numpy as np
-    view(np.random.random((32,10,128,2,4)))
+    view(np.random.random((128,256,2,4)))

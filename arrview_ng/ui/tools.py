@@ -25,7 +25,6 @@ class PanTool(object):
             self.origin = ev.mouse.screen_pos
 
     def mouse_release_event(self, ev):
-        print('pan tool', 'mouse released', ev.mouse)
         if self.origin:
             self.origin = None
             ev.graphics.setCursor(self.prev_cursor)

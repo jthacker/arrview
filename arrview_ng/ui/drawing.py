@@ -1,19 +1,20 @@
-from PySide.QtCore import Qt, QRectF
+from PySide.QtCore import Qt, QRectF, QPoint, QPointF
 from PySide.QtGui import (QGraphicsPixmapItem, QPixmap, QPainter,
         QGraphicsItem)
 
+import math
 import skimage as ski
 import skimage.draw
 
 class PaintBrushItem(QGraphicsItem):
     '''PaintBrushItem is a QGraphicsItem that anchors to pixel locations.'''
 
-    def __init__(self):
+    def __init__(self, radius=0, color=Qt.black):
         super(PaintBrushItem, self).__init__()
-        self._color = Qt.black
+        self._color = color
         self._points = []
         self._connect_points = True
-        self.set_radius(0)
+        self.set_radius(radius)
 
     def set_color(self, color):
         self._color = color
@@ -53,7 +54,7 @@ class PaintBrushItem(QGraphicsItem):
 
     def snap_pos(self, pos):
         f = lambda a: int(math.floor(a))
-        return QPointF(f(pos.x()),f(pos.y()))
+        return QPoint(f(pos.x()),f(pos.y()))
 
     def setPos(self, pos):
         super(PaintBrushItem, self).setPos(self.snap_pos(pos))
@@ -68,10 +69,10 @@ class PaintBrushItem(QGraphicsItem):
         return QRectF(0,0,2*r+1,2*r+1)
 
     def fill_pixmap(self, pixmap, origin):
-        ox,oy = self.snap_pos(origin)
-        pos = self.pos()
-        snapped_pos = self.snap_pos(pos)
-        cx,cy = snapped_pos.x(),snapped_pos.y()
+        origin = self.snap_pos(origin)
+        pos = self.snap_pos(self.pos())
+        ox,oy = origin.x(), origin.y()
+        cx,cy = pos.x(),pos.y()
 
         p = QPainter(pixmap)
         p.setCompositionMode(QPainter.CompositionMode_Source)
