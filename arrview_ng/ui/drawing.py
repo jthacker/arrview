@@ -51,13 +51,13 @@ class PaintBrushItem(QGraphicsItem):
         p.drawPixmap(rect, self._cursor_pixmap, rect)
         p.restore()
 
-    def snap_pos(self, x, y):
+    def snap_pos(self, pos):
         f = lambda a: int(math.floor(a))
-        return f(x),f(y)
+        return QPointF(f(pos.x()),f(pos.y()))
 
-    def set_pos(self, x, y):
-        super(PaintBrushItem, self).set_pos(*self.snap_pos(x,y))
-       
+    def setPos(self, pos):
+        super(PaintBrushItem, self).setPos(self.snap_pos(pos))
+    
     def paint(self, p, option, widget):
         r = self._radius
         self._paint_cursor(p)
@@ -68,9 +68,10 @@ class PaintBrushItem(QGraphicsItem):
         return QRectF(0,0,2*r+1,2*r+1)
 
     def fill_pixmap(self, pixmap, origin):
-        ox,oy = self.snap_pos(*origin)
+        ox,oy = self.snap_pos(origin)
         pos = self.pos()
-        cx,cy = self.snap_pos(pos.x(), pos.y())
+        snapped_pos = self.snap_pos(pos)
+        cx,cy = snapped_pos.x(),snapped_pos.y()
 
         p = QPainter(pixmap)
         p.setCompositionMode(QPainter.CompositionMode_Source)
