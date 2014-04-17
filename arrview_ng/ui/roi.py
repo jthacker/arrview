@@ -12,7 +12,9 @@ class PixelPainterTool(object):
     def attach_event(self, graphics):
         self.paintbrush = PaintBrushItem(radius=5)
         self.roi_pixmapitem = QGraphicsPixmapItem()
+        #TODO: Should not be referencing graphics._pixmap
         self.roi_pixmap = QPixmap(graphics._pixmap.size())
+        self.roi_pixmap.fill(Qt.transparent)
         graphics.scene().addItem(self.paintbrush)
         graphics.scene().addItem(self.roi_pixmapitem)
 
@@ -33,7 +35,7 @@ class PixelPainterTool(object):
             self.paintbrush.fill_pixmap(self.roi_pixmap, self._origin)
             self.roi_pixmapitem.setPixmap(self.roi_pixmap)
             self._origin = ev.mouse.pos
-        return True
+            return True
 
 
 class ROIPanel(object):
