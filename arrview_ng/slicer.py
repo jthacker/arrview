@@ -33,14 +33,22 @@ class SliceTuple(tuple):
     def is_transposed(self):
         return self.ydim > self.xdim
 
+    @property
+    def _slice(self):
+        return [slice(None) if d in self.viewdims else x for d,x in enumerate(self)]
+
     def viewarray(self, arr):
         '''Transforms arr from Array coordinates to Screen coordinates
         using the transformation described by this object'''
         assert arr.ndim == len(self), 'dimensions of arr must equal the length of this object'
-        viewdims = self.viewdims
-        arrayslice = [slice(None) if d in viewdims else x for d,x in enumerate(self)]
-        a = arr[arrayslice]
+        a = arr[self._slice]
         return a.transpose() if self.is_transposed else a
+    
+    def set_viewarray(self, arr, val):
+        if self.is_transposed:
+            arr[self._slice] = val.T
+        else:
+            arr[self._slice] = val
 
     def screen_coords_to_array_coords(self, x, y):
         '''Transforms arr of Screen coordinates to Array indicies'''
@@ -174,6 +182,10 @@ class Slicer(object):
     def view(self):
         '''Get the current view of the array'''
         return self.slc.viewarray(self.arr)
+
+    @view.setter
+    def view(self, val):
+        self.slc.set_viewarray(self.arr, val)
 
     def __repr__(self):
         return rep(self, ['arr','slc'])

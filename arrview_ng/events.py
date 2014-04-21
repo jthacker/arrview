@@ -42,13 +42,13 @@ class GraphicsViewEventFilter(QObject):
         self.tools.insert(0, (tool, tuple(toiterable(filters))))
 
     def remove_tool(self, tool):
-        tfs = filter(lambda tf: tf[0]==tool, self.tools)
+        tfs = [(i,tf) for i,tf in enumerate(self.tools) if tf[0]==tool]
         assert len(tfs) <= 1, 'There should be no duplicates in self.tools'
         if len(tfs) == 1:
-            tool,filters = tfs[0]
+            i,(tool,filters) = tfs[0]
             if hasattr(tool, 'detach_event'):
                 tool.detach_event(self.graphicsview)
-            self.tools.remove(tool)
+            self.tools.pop(i)
 
     def convert_mouse_event(self, ev):
         screen_pos = ev.pos()

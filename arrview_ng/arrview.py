@@ -21,7 +21,7 @@ class ArrayView(QObject):
     def __init__(self, ndarray):
         super(ArrayView, self).__init__()
         self.slicer = Slicer(ndarray)
-        self.cmap = cm.ColorMapper(cm.jet, cm.LinearNorm(*cm.autoscale(ndarray)))
+        self.cmap = cm.ColorMapper(cm.gray, cm.LinearNorm(*cm.autoscale(ndarray)))
         self.cmap.updated.connect(self.refreshed.emit)
         self.sliceeditor = SliceEditor(self.slicer.slc)
         self.sliceeditor.slice_changed.connect(self._slice_changed)
