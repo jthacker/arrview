@@ -1,6 +1,7 @@
-from PySide.QtCore import Qt, QEvent as QEV, QObject, Signal
+from PySide.QtCore import (Qt, QEvent as QEV, QObject, Signal,
+        QAbstractTableModel)
 from PySide.QtGui import (QWidget, QVBoxLayout, QCheckBox, QGraphicsPixmapItem, 
-        QPixmap, QImage)
+        QPixmap, QImage, QColor, QTableView, QHeaderView, QAbstractItemView)
 
 import numpy as np
 
@@ -15,7 +16,6 @@ def pixmap_to_ndarray(pixmap, alpha_threshold=0):
     w,h = img.width(),img.height()
     ptr = img.constBits()
     arr = np.frombuffer(ptr, dtype='uint8').reshape(h,w,4)
-    print('pixmap_to_ndarray', arr)
     out = (arr[...,3] > alpha_threshold).copy()
     return out
 
@@ -53,7 +53,7 @@ class PixelPainterTool(QObject):
         self.pixmapitem.setPixmap(self.pixmap)
 
     def attach_event(self, graphics):
-        self.paintbrush = PaintBrushItem(radius=5, color=Qt.green)
+        self.paintbrush = PaintBrushItem(radius=5, color=QColor(0,255,0,128))
         self.pixmapitem = QGraphicsPixmapItem()
         #TODO: Should not be referencing graphics._pixmap
         self.pixmap = QPixmap(graphics._pixmap.size())
@@ -72,7 +72,6 @@ class PixelPainterTool(QObject):
 
     def mouse_release_event(self, ev):
         self._origin = None
-        print('updated')
         self.updated.emit()
 
     def mouse_move_event(self, ev):
@@ -85,6 +84,62 @@ class PixelPainterTool(QObject):
             return True
 
 
+class ROITableModel(QAbstractTableModel):
+    roi_name_changed = Signal(object, str)
+    header = ['name', 'mean', 'std', 'size']
+
+    def __init__(self, rois):
+        super(ROITableModel, self).__init__()
+        self.rois = rois
+
+    def rowCount(self, parent):
+        return len(self.rois)
+
+    def columnCount(self, parent):
+        return 4
+
+    def data(self, index, role):
+        if not index.isValid() or role != Qt.DisplayRole:
+            return None
+        return self.rois[index.row()][index.column()+1]
+
+    def setData(self, index, value, role):
+        if index.column() != 0:
+            return False
+        row = self.rois[index.row()]
+        row[1] = value
+        self.roi_name_changed.emit(row[0], value)
+        return True
+
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            return ROITableModel.header[col]
+        return None
+
+    def flags(self, index):
+        flags = super(ROITableModel, self).flags(index)
+        if index.column() == 0:
+            flags |= Qt.ItemIsEditable
+        return flags
+
+
+class ROIManager(object):
+    def __init__(self, rois):
+        self.rois = rois 
+
+    def widget(self):
+        model = ROITableModel(rois)
+        table = QTableView()
+        table.setModel(model)
+        table.horizontalHeader().setResizeMode(0, QHeaderView.Stretch)
+        table.horizontalHeader().setResizeMode(1, QHeaderView.ResizeToContents)
+        table.horizontalHeader().setResizeMode(2, QHeaderView.ResizeToContents)
+        table.horizontalHeader().setResizeMode(3, QHeaderView.ResizeToContents)
+        table.verticalHeader().hide()
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        return table
+
+    
 class ROIPanel(object):
     def __init__(self, arrview):
         self.arrview = arrview
@@ -107,7 +162,6 @@ class ROIPanel(object):
 
     def _roi_updated(self):
         self.roi_slicer.view = self.tool.array
-        print('roi_slicer', self.roi_slicer._arr)
 
     def _slice_changed(self, slc):
         if self.tool is not None:
@@ -121,3 +175,22 @@ class ROIPanel(object):
         panel.setLayout(QVBoxLayout())
         panel.layout().addWidget(drawbutton)
         return panel
+
+
+if __name__ == '__main__':
+    import sys
+    from PySide.QtGui import QApplication
+
+    app = QApplication.instance()
+    if not app:
+        app = QApplication(sys.argv)
+
+    rois = []
+    for i in range(10):
+        roi = np.random.random((10,10)) > 0.5
+        rois.append([roi, 'roi-%i' % i, i*10, i*0.2, i*100])
+    roi_manager = ROIManager(rois)
+    table = roi_manager.widget()
+    table.show()
+    sys.exit(app.exec_())
+
