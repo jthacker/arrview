@@ -59,6 +59,8 @@ class ArrayViewer(HasTraits):
 
         if roi_filename is None:
             self.roi_filename = os.path.join(os.path.abspath('.'))
+        elif os.path.isdir(roi_filename):
+            self.roi_filename = roi_filename
         else:
             rois = ROIPersistence.load(roi_filename)
             self.roiManager.rois.extend(rois)

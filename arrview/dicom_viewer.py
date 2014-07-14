@@ -102,7 +102,7 @@ class DicomSeriesViewer(HasStrictTraits):
         try:
             roi_filename = series.first.meta.roi_filename
         except AttributeError as e:
-            roi_filename = None
+            roi_filename = os.path.dirname(series.first.filename)
 
         view(series.data(grouper), roi_filename=roi_filename)
 
