@@ -45,10 +45,9 @@ class ArrayViewer(HasTraits):
 
     toolSet = Instance(ToolSet)
 
-    def __init__(self, slicer, default_directory=None):
+    def __init__(self, slicer, roi_filename=None):
         super(ArrayViewer, self).__init__()
         self.slicer = slicer
-        self.default_directory = default_directory
         slicerDims = SlicerDims(self.slicer)
         self.roiManager = ROIManager(
                 slicer=self.slicer,
@@ -57,7 +56,13 @@ class ArrayViewer(HasTraits):
                 slicerDims=slicerDims,
                 cmap=ColorMapper(slicer=self.slicer))
         self.bottomPanel.cmap.norm.set_scale(slicer.arr)
-        self.default_directory = default_directory
+
+        if roi_filename is None:
+            self.roi_filename = os.path.join(os.path.abspath('.'))
+        else:
+            rois = ROIPersistence.load(roi_filename)
+            self.roiManager.rois.extend(rois)
+            self.roi_filename = roi_filename
 
         self._defaultFactories = [
             CursorInfoTool(
@@ -92,7 +97,6 @@ class ArrayViewer(HasTraits):
         self.colormapInfo = msg
   
     def default_traits_view(self):
-        loadSaveFile = os.path.join(os.path.abspath('.')) if self.default_directory is None else self.default_directory
         return View(
             VSplit(
                 HSplit(
@@ -119,7 +123,7 @@ class ArrayViewer(HasTraits):
                     name='File')),
             resizable=True,
             key_bindings=bindings,
-            handler=ArrayViewerHandler(loadSaveFile=loadSaveFile))
+            handler=ArrayViewerHandler(loadSaveFile=self.roi_filename))
 
     @cached_property
     def _get_pixmap(self):

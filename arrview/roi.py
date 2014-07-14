@@ -157,7 +157,7 @@ class ROIManager(HasTraits):
     def by_name(self, name):
         return [roi for roi in self.rois if roi.name==name]
 
-    def _new_roi(self, slc, poly):
+    def _new_roi(self, slc, poly, name=None):
         roi = ROI(
             name='roi_%02d' % self.nextID,
             slicer=self.slicer,
@@ -179,7 +179,17 @@ class ROIManager(HasTraits):
         self.selected = []
 
     def _copy_fired(self):
-        self.rois.extend([self._new_roi(roi.slc, roi.poly.copy()) for roi in self.selected])
+        '''Changes all dims in ROIs slice to match the free dims
+        in the current arrview slice'''
+        arrslc = self.slicer.slc
+        rois = []
+        for roi in self.selected:
+            slc = list(roi.slc)
+            for dim in arrslc.freedims:
+                slc[dim] = arrslc[dim]
+            rois.append(ROI(name=roi.name, slc=SliceTuple(slc),
+                poly=roi.poly.copy()))
+        self.rois.extend(rois)
 
     def _replicate_fired(self):
         '''Copy the currently selected ROIs to each place in the 

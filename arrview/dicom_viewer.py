@@ -8,8 +8,7 @@ from traitsui.table_column import ObjectColumn
 
 import jtmri.dcm
 
-from .file_dialog import open_file
-from . import create_viewer
+from . import view
 
 class DicomSeries(HasStrictTraits):
     series_number = Int
@@ -98,9 +97,14 @@ class DicomSeriesViewer(HasStrictTraits):
 
     def _viewseries_fired(self):
         grouper = ['SliceLocation'] if self.selection.slices > 0 else []
-        data = self.selection.series.data(grouper)
-        viewer = create_viewer(data, self.directory)
-        viewer.configure_traits()
+        series = self.selection.series
+        
+        try:
+            roi_filename = series.first.meta.roi_filename
+        except AttributeError as e:
+            roi_filename = None
+
+        view(series.data(grouper), roi_filename=roi_filename)
 
     def _load_fired(self):
         self._read_directory()
