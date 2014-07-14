@@ -91,6 +91,7 @@ class DicomSeriesViewer(HasStrictTraits):
                         show_label=False,
                         style='readonly',
                         visible_when='len(series) == 0'))),
+            title='Dicom Viewer',
             height=400,
             width=600,
             resizable=True)

@@ -124,6 +124,7 @@ class ArrayViewer(HasTraits):
                     Action(name='Load', action='_load_rois'),
                     name='File')),
             resizable=True,
+            title='Array Viewer',
             key_bindings=bindings,
             handler=ArrayViewerHandler(loadSaveFile=self.roi_filename))
 
