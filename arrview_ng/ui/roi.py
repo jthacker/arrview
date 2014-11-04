@@ -1,11 +1,13 @@
 from PySide.QtCore import (Qt, QEvent as QEV, QObject, Signal,
         QAbstractTableModel)
-from PySide.QtGui import (QWidget, QVBoxLayout, QCheckBox, QGraphicsPixmapItem, 
-        QPixmap, QImage, QColor, QTableView, QHeaderView, QAbstractItemView)
+from PySide.QtGui import (QWidget, QHBoxLayout, QVBoxLayout, QCheckBox, QGraphicsPixmapItem, 
+        QPixmap, QImage, QColor, QTableView, QHeaderView, QAbstractItemView, QRadioButton,
+        QGroupBox)
 
 import numpy as np
 
 from .drawing import PaintBrushItem
+from .slider import SliderIntegerEditor
 from ..colormap import ArrayPixmap
 from ..events import MouseFilter
 from ..slicer import Slicer
@@ -39,9 +41,11 @@ def ndarray_to_pixmap(array, color=[0,255,0], alpha=128):
 class PixelPainterTool(QObject):
     updated = Signal()
 
-    def __init__(self):
+    def __init__(self, color, radius):
         super(PixelPainterTool, self).__init__()
         self._origin = None
+        self.color = color
+        self.radius = radius
 
     @property
     def array(self):
@@ -52,8 +56,16 @@ class PixelPainterTool(QObject):
         self.pixmap = ndarray_to_pixmap(arr)
         self.pixmapitem.setPixmap(self.pixmap)
 
+    def set_color(self, color):
+        self.color = color
+        self.paintbrush.set_color(color)
+
+    def set_radius(self, radius):
+        self.radius = radius
+        self.paintbrush.set_radius(radius)
+
     def attach_event(self, graphics):
-        self.paintbrush = PaintBrushItem(radius=5, color=QColor(0,255,0,128))
+        self.paintbrush = PaintBrushItem(radius=self.radius, color=self.color)
         self.pixmapitem = QGraphicsPixmapItem()
         #TODO: Should not be referencing graphics._pixmap
         self.pixmap = QPixmap(graphics._pixmap.size())
@@ -96,7 +108,7 @@ class ROITableModel(QAbstractTableModel):
         return len(self.rois)
 
     def columnCount(self, parent):
-        return 4
+        return len(self.header)
 
     def data(self, index, role):
         if not index.isValid() or role != Qt.DisplayRole:
@@ -142,23 +154,37 @@ class ROIManager(object):
     
 class ROIPanel(object):
     def __init__(self, arrview):
-        self.arrview = arrview
         self.roi_slicer = Slicer(np.zeros(arrview.slicer.shape, dtype=bool))
+        self.arrview = arrview
         self.arrview.sliceeditor.slice_changed.connect(self._slice_changed)
         self.tool = None
+        self.radius = SliderIntegerEditor(5, 0, 100)
+        self.radius.value_changed.connect(self._radius_changed)
         self.filters = [
             MouseFilter(QEV.MouseMove), 
             MouseFilter([QEV.MouseMove, QEV.MouseButtonPress, QEV.MouseButtonRelease], 
                 buttons=Qt.LeftButton)]
 
-    def _state_changed(self, state):
-        if state == Qt.Checked:
-            self.tool = PixelPainterTool()
+    def _radius_changed(self):
+        if self.tool is not None:
+            self.tool.set_radius(self.radius.value)
+
+    def _disable_clicked(self):
+        self.arrview.remove_tool(self.tool)
+        self.tool = None
+
+    def _draw_clicked(self):
+        if self.tool is None:
+            self.tool = PixelPainterTool(radius=self.radius.value, color=QColor(0,255,0,128))
             self.tool.updated.connect(self._roi_updated)
             self.arrview.add_tool(self.tool, self.filters)
-        elif state == Qt.Unchecked and self.tool is not None:
-            self.arrview.remove_tool(self.tool)
-            self.tool = None
+        else:
+            self.tool.set_color(QColor(0,255,0,128))
+            self.tool.set_radius(self.radius.value)
+
+    def _erase_clicked(self):
+        self.tool.set_color(QColor(0,0,0,0))
+        self.tool.set_radius(self.radius.value)
 
     def _roi_updated(self):
         self.roi_slicer.view = self.tool.array
@@ -169,11 +195,23 @@ class ROIPanel(object):
             self.tool.array = self.roi_slicer.view
 
     def widget(self):
-        drawbutton = QCheckBox('draw')
-        drawbutton.stateChanged.connect(self._state_changed)
+        disable = QRadioButton('Disable')
+        disable.setChecked(True)
+        disable.clicked.connect(self._disable_clicked)
+        draw = QRadioButton('Draw')
+        draw.clicked.connect(self._draw_clicked)
+        erase = QRadioButton('Erase')
+        erase.clicked.connect(self._erase_clicked)
+        hbox = QHBoxLayout()
+        hbox.addWidget(disable)
+        hbox.addWidget(draw)
+        hbox.addWidget(erase)
+        grp = QGroupBox('Commands')
+        grp.setLayout(hbox)
         panel = QWidget()
         panel.setLayout(QVBoxLayout())
-        panel.layout().addWidget(drawbutton)
+        panel.layout().addWidget(grp)
+        panel.layout().addWidget(self.radius.widget(playable=False))
         return panel
 
 

@@ -55,25 +55,17 @@ class ContinuousSlider(QSlider):
             super(ContinuousSlider, self).mousePressEvent(event)
 
 
-class PlayableSlider(QWidget):
+class Slider(QWidget):
     '''Unlike the usual valueChanged signal in QSlider, value_changed here is only
     emitted when the user edits the value. Calling set_value will not emit this signal'''
     value_changed = Signal(int)
-     
+
     def __init__(self, orientation=Qt.Horizontal):
-        super(PlayableSlider, self).__init__()
+        super(Slider, self).__init__()
         if orientation == Qt.Horizontal:
             self.setLayout(QHBoxLayout())
         else:
             self.setLayout(QVBoxLayout())
-
-        self.playing = False
-        self.timer = QTimer()
-        self.playIcon = self.style().standardIcon(QStyle.SP_MediaPlay)
-        self.pauseIcon = self.style().standardIcon(QStyle.SP_MediaPause)
-        self.playbutton = QPushButton()
-        self.playbutton.setIcon(self.playIcon)
-        self.playbutton.clicked.connect(lambda: self.set_playing(not self.playing))
 
         self.slider = ContinuousSlider(orientation)
         self.slider.setPageStep(1)
@@ -86,17 +78,6 @@ class PlayableSlider(QWidget):
         self.lineedit.setAlignment(Qt.AlignRight)
         self.layout().setContentsMargins(0,0,0,0)
         self.layout().addWidget(self.lineedit, 0)
-        self.layout().addWidget(self.playbutton, 0)
-
-    def set_playing(self, is_playing):
-        if is_playing:
-            self.playbutton.setIcon(self.pauseIcon)
-            self.playing = True
-            self.timer.start(50)
-        else:
-            self.playing = False
-            self.playbutton.setIcon(self.playIcon)
-            self.timer.stop()
 
     def set_range(self, low, high):
         self.slider.setRange(low, high)
@@ -110,21 +91,50 @@ class PlayableSlider(QWidget):
         self.value_changed.emit(val)
 
 
+class PlayableSlider(Slider):
+    def __init__(self, orientation=Qt.Horizontal):
+        super(PlayableSlider, self).__init__()
+
+        self.playing = False
+        self.timer = QTimer()
+        self.playIcon = self.style().standardIcon(QStyle.SP_MediaPlay)
+        self.pauseIcon = self.style().standardIcon(QStyle.SP_MediaPause)
+        self.playbutton = QPushButton()
+        self.playbutton.setIcon(self.playIcon)
+        self.playbutton.clicked.connect(lambda: self.set_playing(not self.playing))
+
+        self.layout().addWidget(self.playbutton, 0)
+
+    def set_playing(self, is_playing):
+        if is_playing:
+            self.playbutton.setIcon(self.pauseIcon)
+            self.playing = True
+            self.timer.start(50)
+        else:
+            self.playing = False
+            self.playbutton.setIcon(self.playIcon)
+            self.timer.stop()
+
+
 class SliderIntegerEditor(QObject):
     value_changed = Signal(int)
     range_changed = Signal(int, int)
     
     def __init__(self, value, low, high):
         super(SliderIntegerEditor, self).__init__()
+        self._value = value
         self._low = low
         self._high = high
-        self._value = value
 
-    def widget(self):
-        widget = PlayableSlider()
+    def widget(self, playable=True):
+        if playable:
+            widget = PlayableSlider()
+            widget.timer.timeout.connect(self._increment)
+        else:
+            widget = Slider()
         widget.set_range(self.low, self.high)
+        widget.set_value(self._value)
         widget.value_changed.connect(self._ui_value_changed)
-        widget.timer.timeout.connect(self._increment)
         self.range_changed.connect(widget.set_range)
         self.value_changed.connect(widget.set_value)
         return widget

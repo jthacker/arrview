@@ -38,7 +38,8 @@ class ArrayView(QObject):
         self.tool_added.connect(evf.add_tool)
         self.tool_removed.connect(evf.remove_tool)
         graphics.viewport().installEventFilter(evf)
-        self.refreshed.connect(lambda: graphics.setPixmap(self.cmap.ndarray_to_pixmap(self.slicer.view)))
+        refreshed = lambda: graphics.setPixmap(self.cmap.ndarray_to_pixmap(self.slicer.view))
+        self.refreshed.connect(refreshed)
 
         sidebar = QWidget()
         sidebar.setLayout(QVBoxLayout())
@@ -90,12 +91,18 @@ def view(arr):
     arrview.cmap.updated.connect(lambda: colormap_info(colormap_info_widget, arrview.cmap))
 
     arrview.add_tool(PanTool(),
-            MouseFilter([QEV.MouseMove, QEV.MouseButtonPress, QEV.MouseButtonRelease], buttons=Qt.LeftButton))
-    arrview.add_tool(ZoomTool(), [ MouseFilter(QEV.MouseButtonDblClick, buttons=Qt.MiddleButton),
-            MouseFilter(QEV.Wheel) ])
+            MouseFilter([QEV.MouseMove, QEV.MouseButtonPress, QEV.MouseButtonRelease], 
+                        buttons=Qt.LeftButton))
+
+    arrview.add_tool(ZoomTool(), [
+            MouseFilter(QEV.MouseButtonDblClick, buttons=Qt.MiddleButton),
+            MouseFilter(QEV.Wheel)])
+
     arrview.add_tool(ColorMapTool(arrview), 
-            MouseFilter([QEV.MouseMove, QEV.MouseButtonPress, QEV.MouseButtonDblClick], buttons=Qt.RightButton))
-    arrview.add_tool(cursortool,MouseFilter(QEV.MouseMove))
+            MouseFilter([QEV.MouseMove, QEV.MouseButtonPress, QEV.MouseButtonDblClick], 
+                        buttons=Qt.RightButton))
+
+    arrview.add_tool(cursortool, MouseFilter(QEV.MouseMove))
     
     win = QMainWindow()
     win.setCentralWidget(viewWidget)
