@@ -241,4 +241,4 @@ class ROIPersistence(object):
                     ROI(name=roigrp.attrs['name'],
                         poly=roigrp['poly'].value,
                         slc=SliceTuple.from_arrayslice(arrslc, viewdims)))
-        return rois
+        return sorted(rois, key=lambda r: (r.slc, r.name))
