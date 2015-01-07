@@ -10,12 +10,13 @@ import jtmri.dcm
 
 from . import view
 
+
 class DicomSeries(HasStrictTraits):
     series_number = Int
     description = String
     images = Int
     slices = Int
-
+    rois = String
     series = Any
 
     def __init__(self, series):
@@ -24,7 +25,13 @@ class DicomSeries(HasStrictTraits):
         self.series_number = s.SeriesNumber
         self.description = s.SeriesDescription
         self.images = len(series)
-        self.slices = len(set(filter(lambda x: x is not None, series.all.SliceLocation))) 
+        self.slices = len(set(filter(lambda x: x is not None, series.all.SliceLocation)))
+        self.rois = ' '
+        try:
+            self.rois = ' '.join('%s: %d' % (k,len(v)) for k,v in 
+                                    sorted(series.first.meta.roi.iteritems(), key=lambda x: x[0]))
+        except AttributeError:
+            pass
 
 
 dicomseries_editor = TableEditor(
@@ -35,9 +42,10 @@ dicomseries_editor = TableEditor(
     selection_mode = 'row',
     selected = 'selection',
     columns = [ ObjectColumn(name='series_number', label='Series', editable=False),
-                ObjectColumn(name='description', label='Description', editable=False, width=1.0),
+                ObjectColumn(name='description', label='Description', editable=False, width=0.8),
                 ObjectColumn(name='slices', label='Slices', editable=False),
-                ObjectColumn(name='images', label='Images', editable=False) ])
+                ObjectColumn(name='images', label='Images', editable=False),
+                ObjectColumn(name='rois', label='ROIs', editable=False, width=0.2)])
 
 
 class DicomReaderThread(Thread):
@@ -58,6 +66,7 @@ class DicomSeriesViewer(HasStrictTraits):
     viewseries = Button
     directory = Directory
     load = Button
+    roi_tag = String('/')
 
     series = List(DicomSeries, [])
     message = String('Select a directory to load dicoms from')
@@ -70,27 +79,33 @@ class DicomSeriesViewer(HasStrictTraits):
         return View(
             Group(
                 HGroup(
-                    Item('viewseries',
-                        label='View',
-                        show_label=False,
-                        enabled_when='selection is not None'),
                     Item('directory',
                         enabled_when='dicomReaderThread is None',
                         show_label=False),
                     Item('load',
-                        label='Load',
+                        label='Reload',
                         enabled_when='dicomReaderThread is None',
+                        visible_when='False',
                         show_label=False)),
                 Group(
                     Item('series',
-                            show_label=False,
-                            editor=dicomseries_editor,
-                            style='readonly',
-                            visible_when='len(series) > 0'),
+                        show_label=False,
+                        editor=dicomseries_editor,
+                        style='readonly',
+                        visible_when='len(series) > 0'),
                     Item('message',
                         show_label=False,
                         style='readonly',
-                        visible_when='len(series) == 0'))),
+                        visible_when='len(series) == 0'),
+                    springy=True),
+                HGroup(
+                    Item('viewseries',
+                        label='View',
+                        show_label=False,
+                        enabled_when='selection is not None'),
+                    Item('roi_tag', label='ROI Tag'),
+                    visible_when='len(series) > 0'),
+                springy=True),
             title='Dicom Viewer',
             height=400,
             width=600,
@@ -101,10 +116,9 @@ class DicomSeriesViewer(HasStrictTraits):
         series = self.selection.series
         
         try:
-            roi_filename = series.first.meta.roi_filename
-        except AttributeError as e:
+            roi_filename = series.first.meta.roi_filename[self.roi_tag]
+        except (AttributeError, KeyError):
             roi_filename = os.path.dirname(series.first.filename)
-
         view(series.data(grouper), roi_filename=roi_filename)
 
     def _load_fired(self):
@@ -139,7 +153,6 @@ def main(path):
     viewer = DicomSeriesViewer()
     viewer.configure_traits()
     return viewer
-
 
 if __name__=='__main__':
     main(os.path.abspath('.'))
