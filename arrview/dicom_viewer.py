@@ -28,8 +28,8 @@ class DicomSeries(HasStrictTraits):
         self.slices = len(set(filter(lambda x: x is not None, series.all.SliceLocation)))
         self.rois = ' '
         try:
-            self.rois = ' '.join('%s: %d' % (k,len(v)) for k,v in 
-                                    sorted(series.first.meta.roi.iteritems(), key=lambda x: x[0]))
+            rois = sorted(series.first.meta.roi.iteritems(), key=lambda x: x[0])
+            self.rois = ' '.join('%s: %d' % (k,len(v)) for k,v in rois)
         except AttributeError:
             pass
 
