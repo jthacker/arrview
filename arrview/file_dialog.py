@@ -4,6 +4,14 @@ from traitsui.api import (View, VGroup, HGroup, Item,
         ImageEditor, spring, Handler)
 
 import os
+import logging
+
+
+from PySide import QtGui
+
+
+log = logging.getLogger('file_dialog')
+
 
 class FixedFileExistsHandler(FileExistsHandler):
     zzParent = Any
@@ -45,26 +53,39 @@ class FixedOpenFileDialog(OpenFileDialog):
                            parent  = self.info.ok.control ).set(
                            parent  = self.info.ui )
 
-def save_file ( **traits ):
+
+def traits_save_file(file_name):
     """ Returns a file name to save to or an empty string if the user cancels
         the operation. In the case where the file selected already exists, the
         user will be prompted if they want to overwrite the file before the
         selected file name is returned.
     """
+    log.info('save_file: {}'.format(traits))
     traits.setdefault( 'title', 'Save File' )
     traits[ 'is_save_file' ] = True
-    fd = FixedOpenFileDialog( **traits )
+    fd = FixedOpenFileDialog(file_name=file_name)
     if fd.edit_traits( view = 'open_file_view' ).result:
         return fd.file_name
-
     return ''
 
-def open_file ( **traits ):
+
+def traits_open_file(file_name):
     """ Returns a file name to open or an empty string if the user cancels the
         operation.
     """
-    fd = OpenFileDialog( **traits )
-    if fd.edit_traits( view = 'open_file_view' ).result:
+    fd = OpenFileDialog(file_name=filename)
+    if fd.edit_traits(view = 'open_file_view').result:
         return fd.file_name
-
     return ''
+
+
+def qt_save_file(file_name, filters=None):
+    filename, _ =  QtGui.QFileDialog.getSaveFileName(None, 'Save File',
+                                                     file_name, filters)
+    return filename
+
+
+def qt_open_file(file_name, filters=None):
+    filename, _ = QtGui.QFileDialog.getOpenFileName(None, 'Open File',
+                                                    file_name, filters)
+    return filename

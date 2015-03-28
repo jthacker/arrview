@@ -17,7 +17,6 @@ from jtmri.roi import create_mask
 from .util import rep
 from .slicer import Slicer, SliceTuple
 from .ui.dimeditor import SlicerDims
-from .file_dialog import save_file, open_file
 
 import numpy as np
 
@@ -25,6 +24,14 @@ class ROI(HasTraits):
     name = Str
     slc = Instance(SliceTuple)
     poly = Array
+
+    def collapse(self, shape):
+        '''Collapse an ROI to len(shape) if the ROI is not drawn in the
+        dimensions that will be lost.
+        '''
+        ndim = len(shape)
+        if self.slc.xdim < ndim and self.slc.ydim < ndim:
+            self.slc = SliceTuple(self.slc[:ndim])
 
     def mask_arr(self, arr):
         return np.ma.array(data=arr, mask=np.logical_not(self.as_mask(arr.shape)))
@@ -157,6 +164,9 @@ class ROIManager(HasTraits):
     def by_name(self, name):
         return [roi for roi in self.rois if roi.name==name]
 
+    def names(self):
+        return set(roi.name for roi in self.rois)
+
     def _new_roi(self, slc, poly, name=None):
         roi = ROI(
             name='roi_%02d' % self.nextID,
@@ -231,14 +241,16 @@ class ROIPersistence(object):
                 roigrp['poly'] = roi.poly
 
     @staticmethod
-    def load(filename):
+    def load(filename, shape=None):
         rois = []
         with h5py.File(filename, 'r') as f:
             for roigrp in f['/rois'].itervalues():
                 viewdims = roigrp.attrs['viewdims']
                 arrslc = roigrp.attrs['arrslc']
-                rois.append(
-                    ROI(name=roigrp.attrs['name'],
+                roi = ROI(name=roigrp.attrs['name'],
                         poly=roigrp['poly'].value,
-                        slc=SliceTuple.from_arrayslice(arrslc, viewdims)))
+                        slc=SliceTuple.from_arrayslice(arrslc, viewdims))
+                if shape:
+                    roi.collapse(shape)
+                rois.append(roi)
         return sorted(rois, key=lambda r: (r.slc, r.name))

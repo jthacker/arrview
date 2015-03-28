@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 import os
+import csv
+import logging
 
 from traits.api import *
 from traitsui.api import *
@@ -8,12 +10,18 @@ from traitsui.key_bindings import KeyBinding, KeyBindings
 from .slicer import Slicer
 from .roi import ROIManager, ROIPersistence 
 from .colormapper import ColorMapper
-from .file_dialog import open_file, save_file
+from .file_dialog import qt_open_file, qt_save_file
 
 from .ui.slicereditor import PixmapEditor
 from .ui.dimeditor import SlicerDims
 from .ui.tools import (ToolSet, CursorInfoTool, PanTool, ZoomTool, 
         ROIDrawTool, ROIDisplayTool, ROIEditTool, ColorMapTool)
+
+
+import jtmri.roi
+
+
+log = logging.getLogger('arrview')
 
 
 bindings = KeyBindings(
@@ -45,7 +53,7 @@ class ArrayViewer(HasTraits):
 
     toolSet = Instance(ToolSet)
 
-    def __init__(self, slicer, roi_filename=None):
+    def __init__(self, slicer, roi_filename=None, rois_updated=None):
         super(ArrayViewer, self).__init__()
         self.slicer = slicer
         slicerDims = SlicerDims(self.slicer)
@@ -56,15 +64,18 @@ class ArrayViewer(HasTraits):
                 slicerDims=slicerDims,
                 cmap=ColorMapper(slicer=self.slicer))
         self.bottomPanel.cmap.norm.set_scale(slicer.arr)
+        self._rois_updated =  rois_updated if rois_updated is not None else lambda x:x
 
         if roi_filename is None:
             self.roi_filename = os.path.join(os.path.abspath('.'))
-        elif os.path.isdir(roi_filename):
-            self.roi_filename = roi_filename
         else:
-            rois = ROIPersistence.load(roi_filename)
-            self.roiManager.rois.extend(rois)
+            try:
+                rois = ROIPersistence.load(roi_filename, self.slicer.shape)
+                self.roiManager.rois.extend(rois)
+            except IOError:
+                pass
             self.roi_filename = roi_filename
+            log.info('roi_filename: %s' % roi_filename)
 
         self._defaultFactories = [
             CursorInfoTool(
@@ -122,11 +133,14 @@ class ArrayViewer(HasTraits):
                 Menu(
                     Action(name='Save', action='_save_rois'),
                     Action(name='Load', action='_load_rois'),
-                    name='File')),
+                    name='File'),
+                Menu(
+                    Action(name='As CSV', action='_export_csv_collapsed'),
+                    name='Export')),
             resizable=True,
             title='Array Viewer',
             key_bindings=bindings,
-            handler=ArrayViewerHandler(loadSaveFile=self.roi_filename))
+            handler=ArrayViewerHandler(roi_file=self.roi_filename))
 
     @cached_property
     def _get_pixmap(self):
@@ -134,20 +148,42 @@ class ArrayViewer(HasTraits):
 
 
 class ArrayViewerHandler(Controller):
-    loadSaveFile = File
+    roi_file = File
+    export_file = File
 
     def _save_rois(self, info):
-        filename = save_file(file_name=self.loadSaveFile)
+        filename = qt_save_file(file_name=self.roi_file, filters='ROI (*.h5)')
         if filename:
-            self.loadSaveFile = filename
+            self.roi_file = filename
             ROIPersistence.save(info.object.roiManager.rois, filename)
+            info.object._rois_updated(filename)
 
     def _load_rois(self, info):
-        filename = open_file(file_name=self.loadSaveFile)
+        filename = qt_open_file(file_name=self.roi_file, filters='ROI (*.h5)')
         if filename:
-            self.loadSaveFile = filename
+            self.roi_file = filename
             rois = ROIPersistence.load(filename)
             info.object.roiManager.rois.extend(rois)
+
+    def _export_csv_collapsed(self, info):
+        filename = qt_save_file(file_name=self.roi_file, filters='CSV (*.csv)')
+        if not filename:
+            return
+        self.export_file = filename
+        with open(filename, 'w') as f:
+            wr = csv.writer(f)
+            wr.writerow(('roi', 'mean', 'std', 'size'))
+            rois = jtmri.roi.ROISet(
+                    [jtmri.roi.ROI(name=roi.name,
+                                   poly=roi.poly,
+                                   slc=roi.slc)
+                                   for roi 
+                                   in info.object.roiManager.rois])
+            arr = info.object.slicer.arr
+            for name in rois.names:
+                mask = rois.by_name(name).to_mask(arr.shape)
+                masked = arr[mask]
+                wr.writerow((name, masked.mean(), masked.std(), masked.size))
     
     def escape_pressed(self, info):
         '''Prevent escape key from closing the window'''

@@ -1,4 +1,5 @@
 import os.path
+import logging
 from threading import Thread
 
 from traits.api import (HasTraits, HasStrictTraits, List, Int, String, Button, Instance,
@@ -6,9 +7,13 @@ from traits.api import (HasTraits, HasStrictTraits, List, Int, String, Button, I
 from traitsui.api import (View, Group, HGroup, TableEditor, Item)
 from traitsui.table_column import ObjectColumn
 
-import jtmri.dcm
 
-from . import view
+from arrview import view
+import jtmri.dcm
+from jtmri.fit import fit_r2star_fast
+
+
+log = logging.getLogger('dicom-viewer')
 
 
 class DicomSeries(HasStrictTraits):
@@ -20,8 +25,12 @@ class DicomSeries(HasStrictTraits):
     series = Any
 
     def __init__(self, series):
-        s = series.first
         self.series = series
+        self.update()
+        
+    def update(self):
+        series = self.series
+        s = series.first
         self.series_number = s.SeriesNumber
         self.description = s.SeriesDescription
         self.images = len(series)
@@ -32,6 +41,7 @@ class DicomSeries(HasStrictTraits):
             self.rois = ' '.join('%s: %d' % (k,len(v)) for k,v in rois)
         except AttributeError:
             pass
+        print(self.rois)
 
 
 dicomseries_editor = TableEditor(
@@ -42,7 +52,8 @@ dicomseries_editor = TableEditor(
     selection_mode = 'row',
     selected = 'selection',
     columns = [ ObjectColumn(name='series_number', label='Series', editable=False),
-                ObjectColumn(name='description', label='Description', editable=False, width=0.8),
+                ObjectColumn(name='description', label='Description', editable=False,
+                             width=0.8),
                 ObjectColumn(name='slices', label='Slices', editable=False),
                 ObjectColumn(name='images', label='Images', editable=False),
                 ObjectColumn(name='rois', label='ROIs', editable=False, width=0.2)])
@@ -64,6 +75,7 @@ class DicomReaderThread(Thread):
 
 class DicomSeriesViewer(HasStrictTraits): 
     viewseries = Button
+    r2star = Button
     directory = Directory
     load = Button
     roi_tag = String('/')
@@ -75,7 +87,6 @@ class DicomSeriesViewer(HasStrictTraits):
     dicomReaderThread = Instance(Thread)
 
     def default_traits_view(self):
-        dicomseries_editor.dclick
         return View(
             Group(
                 HGroup(
@@ -103,6 +114,10 @@ class DicomSeriesViewer(HasStrictTraits):
                         label='View',
                         show_label=False,
                         enabled_when='selection is not None'),
+                    Item('r2star',
+                        label='R2* Map',
+                        show_label=False,
+                        enabled_when='selection is not None'),
                     Item('roi_tag', label='ROI Tag'),
                     visible_when='len(series) > 0'),
                 springy=True),
@@ -111,15 +126,46 @@ class DicomSeriesViewer(HasStrictTraits):
             width=600,
             resizable=True)
 
+    def _get_roi_filename(self, series):
+        try:
+            return series.first.meta.roi_filename[self.roi_tag]
+        except (AttributeError, KeyError):
+            return None
+
     def _viewseries_fired(self):
         grouper = ['SliceLocation'] if self.selection.slices > 0 else []
         series = self.selection.series
-        
-        try:
-            roi_filename = series.first.meta.roi_filename[self.roi_tag]
-        except (AttributeError, KeyError):
-            roi_filename = os.path.dirname(series.first.filename)
-        view(series.data(grouper), roi_filename=roi_filename)
+        file_dir = os.path.dirname(series.first.filename) 
+        roi_filename = self._get_roi_filename(series)
+        if roi_filename is None:
+            # Create ROIs directory if it does not exist
+            # Assume that the ROIs will be saved to series_##.h5
+            rois_dir = os.path.join(file_dir, 'rois')
+            if not os.path.exists(rois_dir):
+                os.mkdir(rois_dir)
+            series_number = series.first.SeriesNumber
+            series_name = 'series_%02d.h5' % series_number
+            log.info('rois_dir: {} series: {}'.format(rois_dir, series_name))
+            roi_filename = os.path.join(rois_dir, series_name)
+
+        def rois_updated(filename):
+            print('rois_updated', filename, series)
+            jtmri.dcm.dcminfo.update_metadata_rois(series)
+            self.selection.update()
+
+        view(series.data(grouper),
+             roi_filename=roi_filename,
+             rois_updated=rois_updated)
+
+    def _r2star_fired(self):
+        '''Create R2star map or read the saved version'''
+        grouper = ['SliceLocation'] if self.selection.slices > 0 else []
+        series = self.selection.series
+        roi_filename = self._get_roi_filename(series)
+        data = series.data(grouper)
+        echo_times = series.all_unique.EchoTime / 1000.
+        r2star = fit_r2star_fast(echo_times, data)
+        view(r2star, roi_filename=roi_filename)
 
     def _load_fired(self):
         self._read_directory()
@@ -149,10 +195,13 @@ class DicomSeriesViewer(HasStrictTraits):
         self.dicomReaderThread = None
 
 
-def main(path):
-    viewer = DicomSeriesViewer()
+def main(path=None):
+    if path is None:
+        path = os.path.abspath('.')
+    viewer = DicomSeriesViewer(directory=path)
     viewer.configure_traits()
     return viewer
 
+
 if __name__=='__main__':
-    main(os.path.abspath('.'))
+    main()
