@@ -1,16 +1,17 @@
+#!/usr/bin/env python
 import os.path
 import logging
 from threading import Thread
 
-from traits.api import (HasTraits, HasStrictTraits, List, Int, String, Button, Instance,
-        Directory, Any)
-from traitsui.api import (View, Group, HGroup, TableEditor, Item)
-from traitsui.table_column import ObjectColumn
-
-
+## arrview must be imported before traits so that the qt backend will be used
 from arrview import view
 import jtmri.dcm
 from jtmri.fit import fit_r2star_fast
+
+from traits.api import (HasStrictTraits, List, Int, String, Button, Instance,
+        Directory, Any)
+from traitsui.api import (View, Group, HGroup, TableEditor, Item)
+from traitsui.table_column import ObjectColumn
 
 
 log = logging.getLogger('dicom-viewer')
@@ -69,7 +70,8 @@ class DicomReaderThread(Thread):
         self.finished = finished
 
     def run(self):
-        self.dcms = jtmri.dcm.read(self.directory, progress=self.progress, disp=False)
+        self.dcms = jtmri.dcm.read(self.directory, progress=self.progress,
+                                   disp=False, make_cache=True)
         self.finished(self.dcms) 
 
 
@@ -204,4 +206,11 @@ def main(path=None):
 
 
 if __name__=='__main__':
-    main()
+    from terseparse import Parser, Arg, KW
+    import os
+
+    p = Parser('dicom-viewer', 'Display dicom series for viewing and editing ROIs',
+            Arg('directory', 'Working directory to start the viewer in',
+                default=os.path.abspath('.'), nargs='?'))
+    _, args = p.parse_args()
+    main(args.ns.directory)
