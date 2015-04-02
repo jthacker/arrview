@@ -53,8 +53,16 @@ class ArrayViewer(HasTraits):
 
     toolSet = Instance(ToolSet)
 
-    def __init__(self, slicer, roi_filename=None, rois_updated=None):
+    def __init__(self, slicer, roi_filename=None, title=None, rois_updated=None):
+        '''Initialize ArrayViewer from a slicer and optional roi file
+        Args:
+            slice        -- Slice object that holds array and currently viewed slice
+            roi_filename -- Filename for read/writing ROIs to
+            title        -- (default: Array Viewer) Title of the window
+            rois_updated -- (default: None) Callback function, called when ROIs have changed
+        '''
         super(ArrayViewer, self).__init__()
+        self._title = 'Array Viewer' if title is None else title
         self.slicer = slicer
         slicerDims = SlicerDims(self.slicer)
         self.roiManager = ROIManager(
@@ -72,10 +80,10 @@ class ArrayViewer(HasTraits):
             try:
                 rois = ROIPersistence.load(roi_filename, self.slicer.shape)
                 self.roiManager.rois.extend(rois)
+                log.info('loading rois from: %s' % roi_filename)
             except IOError:
                 pass
             self.roi_filename = roi_filename
-            log.info('roi_filename: %s' % roi_filename)
 
         self._defaultFactories = [
             CursorInfoTool(
@@ -131,25 +139,33 @@ class ArrayViewer(HasTraits):
                 StatusItem(name='colormapInfo')],
             menubar = MenuBar(
                 Menu(
-                    Action(name='Save', action='_save_rois'),
-                    Action(name='Load', action='_load_rois'),
+                    Action(name='Quit', action='_quit'),
                     name='File'),
                 Menu(
-                    Action(name='As CSV', action='_export_csv_collapsed'),
-                    name='Export')),
+                    Action(name='Save', action='_save_rois'),
+                    Action(name='Load', action='_load_rois'),
+                    Menu(
+                        Action(name='As CSV', action='_export_csv_collapsed'),
+                        name='Export'),
+                    name='ROI')),
             resizable=True,
-            title='Array Viewer',
+            title=self._title,
             key_bindings=bindings,
-            handler=ArrayViewerHandler(roi_file=self.roi_filename))
+            handler=ArrayViewerHandler(roi_file=self.roi_filename,
+                                       export_file=os.path.splitext(self.roi_filename)[0]))
 
     @cached_property
     def _get_pixmap(self):
         return self.bottomPanel.cmap.array_to_pixmap(self.slicer.view)
 
 
-class ArrayViewerHandler(Controller):
+class ArrayViewerHandler(Handler):
     roi_file = File
     export_file = File
+
+    def _quit(self, info):
+        log.debug('closing window')
+        self.close(info, is_ok=True)
 
     def _save_rois(self, info):
         filename = qt_save_file(file_name=self.roi_file, filters='ROI (*.h5)')
@@ -165,12 +181,23 @@ class ArrayViewerHandler(Controller):
             rois = ROIPersistence.load(filename)
             info.object.roiManager.rois.extend(rois)
 
+    def _get_export_file_name(self, ext):
+        file_name = self.export_file
+        if os.path.isfile(file_name):
+            path, old_ext = os.path.splitext(file_name)
+            file_name = os.path.join(path, ext)
+        return file_name
+
     def _export_csv_collapsed(self, info):
-        filename = qt_save_file(file_name=self.roi_file, filters='CSV (*.csv)')
-        if not filename:
+        '''Exports the ROIs to a CSV file.
+        ROIs with the same name are grouped together before the statistics
+        are calculated.
+        '''
+        file_name = qt_save_file(file_name=self._get_export_file_name('csv'), filters='CSV (*.csv)')
+        if not file_name:
             return
-        self.export_file = filename
-        with open(filename, 'w') as f:
+        self.export_file = file_name
+        with open(file_name, 'w') as f:
             wr = csv.writer(f)
             wr.writerow(('roi', 'mean', 'std', 'size'))
             rois = jtmri.roi.ROISet(

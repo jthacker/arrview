@@ -6,7 +6,7 @@ from collections import namedtuple, OrderedDict
 
 from traits.api import (HasTraits, HasPrivateTraits, List, Instance, Property,
     Any, Str, Int, Float, Button, DelegatesTo, WeakRef, Array, File,
-    on_trait_change, cached_property)
+    on_trait_change, cached_property, TraitError)
 from traitsui.api import View, Item, HGroup, TabularEditor
 from traitsui.tabular_adapter import TabularAdapter
 from traitsui.menu import OKCancelButtons
@@ -70,10 +70,16 @@ class ROIStats(HasTraits):
 
     def update_stats(self):
         shape = self.arr.shape
-        masked_data = self.arr[create_mask(shape, self.slc, self.poly)]
-        self._mean = masked_data.mean()
-        self._std = masked_data.std()
+        mask = create_mask(shape, self.slc, self.poly)
+        masked_data = self.arr[mask]
+        try:
+            self._mean = masked_data.mean()
+            self._std = masked_data.std()
+        except TraitError:
+            self._mean = float('nan')
+            self._std = float('nan')
         self._size = masked_data.size
+
 
     def _get_mean(self):
         return self._mean
