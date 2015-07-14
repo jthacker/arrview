@@ -8,7 +8,6 @@ from threading import Thread
 from arrview import view
 import jtmri.dcm
 import jtmri.roi
-from jtmri.utils import flatten
 from jtmri.fit import fit_r2star_with_threshold
 from jtmri.reports.summary import DicomStudySummaryReport
 
@@ -19,7 +18,7 @@ from traitsui.api import (View, Group, HGroup, TableEditor, Item, MenuBar, Menu,
 from traitsui.table_column import ObjectColumn
 from traitsui.extras.checkbox_column import CheckboxColumn
 
-from .file_dialog import qt_save_file
+from .reports import SummaryReportDialog, CombineForm722ReportDialog
 
 log = logging.getLogger('dicom-viewer')
 
@@ -203,6 +202,8 @@ class DicomSeriesViewer(HasStrictTraits):
                 Menu(
                     Action(name='Summary', action='_create_summary_report',
                            enabled_when='len(selection) > 0'),
+                    Action(name='COMBINE 722', action='_create_combine_722_report',
+                           enabled_when='len(selection) > 0'),
                     name='Reports')),
             title='Dicom Viewer',
             height=400,
@@ -223,6 +224,10 @@ class DicomViewerHandler(Controller):
     def _create_summary_report(self, info):
         selected_series = info.object.selection
         SummaryReportDialog(series=selected_series).configure_traits()
+    
+    def _create_combine_722_report(self, info):
+        selected_series = info.object.selection
+        CombineForm722ReportDialog(series=selected_series).configure_traits()
 
     def _view_r2star_map(self, info):
         '''Create R2star map or read the saved version'''
@@ -237,78 +242,6 @@ class DicomViewerHandler(Controller):
         r2star = fit_r2star_with_threshold(echo_times, data)
         view(r2star, roi_filename=roi_filename)
 
-
-class ReportSeries(HasStrictTraits):
-    series_number = Int
-    description = Str
-    r2star = Bool(default=False)
-    series = Any
-
-    @staticmethod
-    def from_dicom_series(dicom_series):
-        s = dicom_series.series.first
-        return ReportSeries(
-            series_number = s.SeriesNumber,
-            description = s.SeriesDescription,
-            series = dicom_series.series)
-
-
-report_series_editor = TableEditor(
-    sortable = False,
-    configurable = True,
-    reorderable = True,
-    deletable = True,
-    auto_size = True,
-    show_toolbar = True,
-    columns = [
-        ObjectColumn(name='series_number', label='Series', editable=False),
-        ObjectColumn(name='description', label='Description', editable=True),
-        CheckboxColumn(name='r2star', label='R2star', editable=True) ])
-
-
-class SummaryReportDialog(HasStrictTraits):
-    series = List(ReportSeries)
-    save = Button
-    report_file = File
-
-    def __init__(self, series):
-        series = [ReportSeries.from_dicom_series(s) for s in series]
-        super(SummaryReportDialog, self).__init__(
-                series=series,
-                report_file='report.html')
-    
-    def _save_fired(self):
-        log.info('report building started')
-        filename = qt_save_file(file_name=self.report_file, filters='html (*.html)')
-        if not filename:
-            return
-        self.report_file = filename
-        dcms = jtmri.dcm.DicomSet(flatten(rs.series for rs in self.series))
-        report = DicomStudySummaryReport(dcms)
-        for report_series in self.series:
-            log.info('adding series {}'.format(report_series.series_number))
-            if report_series.r2star:
-                report.add_series_r2star(report_series.series_number,
-                                         description=report_series.description)
-            else:
-                report.add_series(report_series.series_number,
-                                  description=report_series.description)
-        log.debug('report building finished')
-        with open(filename, 'w') as f:
-            f.write(report.to_html())
-
-
-    def default_traits_view(self):
-        return View(
-            Item('series',
-                 show_label=False,
-                 editor=report_series_editor,
-                 visible_when='len(series) > 0'),
-            Item('save',
-                 label='Save',
-                 show_label=False),
-            resizable=True)
-    
 
 def main(path=None):
     if path is None:
