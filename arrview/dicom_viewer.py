@@ -142,6 +142,7 @@ class DicomSeriesViewer(HasStrictTraits):
 
     def _read_directory(self):
         self.series = []
+        self._update_progress()
         self.dicomReaderThread = DicomReaderThread(self.directory,
                 progress=self._update_progress,
                 finished=self._directory_finished_loading)
