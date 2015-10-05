@@ -76,8 +76,7 @@ class DicomReaderThread(Thread):
         self.finished = finished
 
     def run(self):
-        self.dcms = jtmri.dcm.read(self.directory, progress=self.progress,
-                                   disp=False, make_cache=True)
+        self.dcms = jtmri.dcm.read(self.directory, progress=self.progress, disp=False)
         self.finished(self.dcms) 
 
 
