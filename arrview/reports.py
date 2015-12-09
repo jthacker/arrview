@@ -4,7 +4,7 @@ import jtmri.dcm
 from jtmri.fit import fit_r2star_with_threshold
 from jtmri.reports.summary import DicomStudySummaryReport
 from jtmri.reports import DicomStudySummaryReport, CombineForm722Report
-from jtmri.utils import flatten
+from jtmri.utils import flatten, unique
 
 from traits.api import (HasTraits, HasStrictTraits, List, Int, Str, Button, Instance,
         Directory, Any, Event, Bool, File, Enum, Property)
@@ -92,13 +92,22 @@ class SummaryReportDialog(HasStrictTraits):
     
 
 class CombineForm722ReportDialog(HasTraits):
-    observer = Str('/')
+    observer = Enum(values='_observer_values')
+    _observer_values = Property()
     adc_series_num = Enum(values='series_numbers')
     r2s_pre_series_num = Enum(values='series_numbers')
     r2s_post_series_num = Enum(values='series_numbers')
     series_numbers = Property
     save = Button
     report_file = File
+
+    def _get__observer_values(self):
+        observers = []
+        for rs in self._input_series:
+            series = rs.series
+            tags = [tag for (tag,) in series.first.meta.roi.groupby('tag').keys()]
+            observers.extend(tags)
+        return unique(observers)
 
     def _get_series_numbers(self):
         return [s.series_number for s in self._input_series] + [None]
