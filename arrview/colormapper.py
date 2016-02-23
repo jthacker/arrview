@@ -1,5 +1,5 @@
 import numpy as np
-from matplotlib.cm import gray, jet, spectral
+from matplotlib import cm
 from collections import namedtuple
 
 from PySide.QtGui import QPixmap, QImage
@@ -40,7 +40,7 @@ class ArrayPixmap(QPixmap):
         self._array = array
 
 
-def ndarray_to_arraypixmap(array, cmap=gray, norm=lambda a: Normalize()(a)):
+def ndarray_to_arraypixmap(array, cmap, norm=lambda a: Normalize()(a)):
     data = ndarray_to_pixdata(array, cmap, norm)
     h,w = array.shape
     img = QImage(data, w, h, QImage.Format_RGB32)
@@ -99,7 +99,10 @@ class Norm(HasTraits):
         return 'Norm(name=%s, vmin=%f, vmax=%f)' % (self.name, self.vmin, self.vmax)
 
 
-_cmaps = [gray,jet,spectral]
+_cmaps = [cm.gray,
+          cm.viridis,
+          cm.jet,
+          cm.spectral]
 
 class ColorMapper(HasPrivateTraits):
     cmap = Any(_cmaps[0])
