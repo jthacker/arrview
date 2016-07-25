@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os
 import csv
 import logging
@@ -7,15 +6,13 @@ from traits.api import *
 from traitsui.api import *
 from traitsui.key_bindings import KeyBinding, KeyBindings
 
-from .slicer import Slicer
-from .roi import ROIManager, ROIPersistence 
-from .colormapper import ColorMapper
-from .file_dialog import qt_open_file, qt_save_file
-
-from .ui.slicereditor import PixmapEditor
-from .ui.dimeditor import SlicerDims
-from .ui.tools import (ToolSet, CursorInfoTool, PanTool, ZoomTool, 
-        ROIDrawTool, ROIDisplayTool, ROIEditTool, ColorMapTool)
+from arrview.colormapper import ColorMapper
+from arrview.file_dialog import qt_open_file, qt_save_file
+from arrview.roi import ROIManager, ROIPersistence 
+from arrview.slicer import Slicer
+from arrview.tools import *
+from arrview.ui.dimeditor import SlicerDims
+from arrview.ui.slicereditor import PixmapEditor
 
 
 import jtmri.roi

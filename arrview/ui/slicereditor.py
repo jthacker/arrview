@@ -7,7 +7,7 @@ from traits.api import (Instance, HasTraits, Int, WeakRef,
 from traitsui.qt4.editor import Editor
 from traitsui.qt4.basic_editor_factory import BasicEditorFactory
 
-from .tools import ToolSet, MouseState, MouseButtons
+from arrview.tools import ToolSet, MouseState, MouseButtons
 
 class ArrayGraphicsView(QGraphicsView):
     '''ArrayGraphicsView is used for viewing a numpy array.

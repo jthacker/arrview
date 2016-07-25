@@ -1,121 +1,21 @@
-from PySide.QtGui import (QGraphicsView, QPolygonF, QBrush, 
-        QColor, QMatrix, QGraphicsItem, QGraphicsPolygonItem)
-from PySide.QtCore import QPointF, Qt
-
-from collections import namedtuple
-from traits.api import (HasTraits, Instance, Float, Str, WeakRef,
-    Any, Int, Tuple, List, Bool, Event, Enum,
-    Property, Callable, on_trait_change)
+import math
 
 import numpy as np
-import math
-import weakref
-import datetime
 
-from .. import settings
-from ..util import rep, clamp
-from ..roi import ROI, ROIManager
-from ..slicer import Slicer
-from ..colormapper import ColorMapper
+from PySide.QtGui import QGraphicsPolygonItem, QMatrix, QPolygonF
+from PySide.QtCore import QPointF, Qt
 
+from traits.api import Bool, Instance, on_trait_change
 
-class MouseButtons(object):
-    def __init__(self, left=False, middle=False, right=False):
-        self._left = left
-        self._middle = middle
-        self._right = right
-
-    @property 
-    def left(self):
-        return self._left and not(self._right or self._middle)
-
-    @property
-    def right(self):
-        return self._right and not(self._left or self._middle)
-
-    @property
-    def middle(self):
-        return self._middle and not(self._left or self._right)
-
-    def all(self):
-        return self._left and self._middle and self._right
-
-    def none(self):
-        return not (self._left or self._middle or self._right)
-
-    def __repr__(self):
-        return rep(self, ['left','middle','right'])
-
-
-class MouseState(HasTraits):
-    coords = Tuple(Float, Float, default=(0,0))
-    screenCoords = Tuple(Float, Float, default=(0,0))
-    delta = Int
-    buttons = Instance(MouseButtons, MouseButtons)
-
-    wheeled = Event
-    pressed = Event
-    released = Event
-    moved = Event
-    doubleclicked = Event
-
-    def __repr__(self): 
-        return rep(self, ['coords','screenCoords', 'delta', 'buttons'])
-
-
-class GraphicsTool(HasTraits):
-    '''Only use dynamic notifications in the _init method when setting
-    up listeners. This has to be done because the class isn't fully
-    initialized until it is passed to the graphics view and init is called.
-    This can lead to null pointer exceptions.'''
-
-    name = Str('DEFAULT_NAME')
-    mouse = Instance(MouseState)
-    factory = WeakRef('GraphicsToolFactory')
-
-    def __init__(self, factory, graphics, mouse):
-        super(GraphicsTool, self).__init__(mouse=mouse, factory=factory)
-        self.graphics = weakref.proxy(graphics)
-        mouse.on_trait_event(self.mouse_moved, 'moved')
-        mouse.on_trait_event(self.mouse_pressed, 'pressed')
-        mouse.on_trait_event(self.mouse_wheeled, 'wheeled')
-        mouse.on_trait_event(self.mouse_released, 'released')
-        mouse.on_trait_event(self.mouse_double_clicked, 'doubleclicked')
-        self.init()
-
-    def init(self):
-        pass
-
-    def destroy(self):
-        pass
-
-    def mouse_pressed(self):
-        pass
-
-    def mouse_moved(self):
-        pass
-
-    def mouse_wheeled(self):
-        pass
-
-    def mouse_released(self):
-        pass
-
-    def mouse_double_clicked(self):
-        pass
-
-
-class GraphicsToolFactory(HasTraits):
-    klass = Instance(GraphicsTool)
-
-    def init_tool(self, graphics, mouse):
-        return self.klass(factory=self, graphics=graphics, mouse=mouse)
+from arrview import settings
+from arrview.roi import ROI, ROIManager
+from arrview.tools.base import GraphicsTool, GraphicsToolFactory
 
 
 def _close_polygon(start, end):
-    '''Given a start and end point, returns a set of integer points
-    that will close the polygon with a straight line from start to
-    end'''
+    """Given a start and end point, returns a set of integer points
+    that will close the polygon with a straight line from start to end
+    """
     x0,y0 = start.x(), start.y(),
 
     xrng = end.x() - x0
@@ -194,7 +94,7 @@ class ROIDrawTool(GraphicsToolFactory):
     klass = _ROIDrawTool
     roiManager = Instance(ROIManager)
 
- 
+
 class PenBrushState(object):
     def __init__(self, pen, brush):
         self.pen = pen
@@ -204,6 +104,7 @@ class PenBrushState(object):
         painter.setPen(self.pen)
         painter.setBrush(self.brush)
         return painter
+
 
 class HighlightingGraphicsPolygonItem(QGraphicsPolygonItem):
     _statedict =  {
@@ -381,170 +282,3 @@ class _ROIEditTool(_ROIDisplayTool):
 class ROIEditTool(GraphicsToolFactory):
     klass = _ROIEditTool
     roiManager = Instance(ROIManager)
-
-
-class _CursorInfoTool(GraphicsTool):
-    name = 'CursorInfo'
-    slicer = Instance(Slicer)
-    callback = Callable
-
-    def init(self):
-        self.slicer = self.factory.slicer
-        self.callback = self.factory.callback
-
-    def mouse_moved(self):
-        self.update()
-
-    @on_trait_change('slicer:view')
-    def update(self):
-        x,y = self.mouse.coords
-        slc = list(self.slicer.slc)
-        xDim,yDim = self.slicer.slc.viewdims
-        slc[xDim], slc[yDim] = x,y
-        
-        view = self.slicer.view
-        shape = view.shape
-        xMax,yMax = shape[1],shape[0]
-
-        msg = '(%s) ' % ','.join(['%03d' % p for p in slc])
-        if 0 <= x < xMax and 0 <= y < yMax:
-            msg += "%0.2f" % view[y,x]
-        else:
-            msg += "  "
-        self.callback(msg)
-
-
-class CursorInfoTool(GraphicsToolFactory):
-    klass = _CursorInfoTool
-    slicer = Instance(Slicer)
-    callback = Callable
-
-
-class _PanTool(GraphicsTool):
-    name = 'Pan'
-
-    def init(self):
-        self.origin = None
-        self.prevCursor = None
-        button = self.factory.button
-        self.buttonTest = lambda mouse: getattr(mouse.buttons, button)
-
-    def mouse_pressed(self):
-        if self.buttonTest(self.mouse):
-            self.origin = self.mouse.screenCoords
-            self.prevCursor = self.graphics.cursor()
-            self.graphics.setCursor(Qt.ClosedHandCursor)
-    
-    def mouse_moved(self):
-        if self.buttonTest(self.mouse) and self.origin:
-            vBar = self.graphics.verticalScrollBar()
-            hBar = self.graphics.horizontalScrollBar();
-            ox,oy = self.origin
-            x,y = self.mouse.screenCoords
-            dx,dy = x-ox,y-oy
-            hBar.setValue(hBar.value() - dx)
-            vBar.setValue(vBar.value() - dy)
-            self.origin = (x,y)
-
-    def mouse_released(self):
-        if self.origin:
-            self.graphics.setCursor(self.prevCursor)
-            self.origin = None
-
-
-class PanTool(GraphicsToolFactory):
-    klass = _PanTool
-    button = Enum('left','middle','right')
-
-
-class _ZoomTool(GraphicsTool):
-    name = 'Zoom'
-
-    def init(self):
-        self.graphics.setTransformationAnchor(
-                QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-        self._default_scale = self.graphics.transform().m11()
-
-    def mouse_wheeled(self):
-        currentScale = self.graphics.transform().m11()
-        zoomIn = self.mouse.delta < 0
-        s = 1.2 if zoomIn else 1/1.2
-        lessThanMax = zoomIn and currentScale < 20
-        greaterThanMin = not zoomIn and currentScale > 0.1
-        if lessThanMax or greaterThanMin:
-            self.graphics.scale(s,s)
-
-    def mouse_double_clicked(self):
-        if self.mouse.buttons.middle:
-            s = self._default_scale
-            self.graphics.scale(s,s)
-
-
-class ZoomTool(GraphicsToolFactory):
-    klass = _ZoomTool
-
-
-class _ColorMapTool(GraphicsTool):
-    name = 'ColorMapTool'
-    colorMapper = Instance(ColorMapper)
-    slicer = Instance(Slicer)
-    callback = Callable
-    
-    def init(self):
-        self.origin = None
-        self.slicer = self.factory.slicer
-        self.callback = self.factory.callback
-        self.colorMapper = self.factory.colorMapper
-
-    def mouse_pressed(self):
-        if self.mouse.buttons.right:
-            self.origin = self.mouse.screenCoords
-            norm = self.colorMapper.norm
-            vmin,vmax = norm.vmin,norm.vmax
-            self.iwidth = vmax - vmin
-            self.icenter = (vmax - vmin) / 2.0 + vmin
-
-    def mouse_moved(self):
-        if self.mouse.buttons.right and self.origin:
-            origin = self.origin
-            coords = self.mouse.screenCoords
-            norm = self.colorMapper.norm
-            low,high = norm.low,norm.high
-
-            scale = lambda dw: 0.001 * (high - low) * dw
-            center = self.icenter + scale(coords[0] - origin[0])
-            halfwidth = (self.iwidth - scale(coords[1] - origin[1])) / 2.0
-            norm.vmin = clamp(center - halfwidth, low, high)
-            norm.vmax = clamp(center + halfwidth, low, high)
-
-    def mouse_double_clicked(self):
-        if self.mouse.buttons.right:
-            self.colorMapper.norm.set_scale(self.slicer.view)
-
-    @on_trait_change('colorMapper.norm.+')
-    def update_callback(self):
-        norm = self.colorMapper.norm
-        self.callback('cmap: [%0.2f, %0.2f]' % (norm.vmin, norm.vmax))
-
-
-class ColorMapTool(GraphicsToolFactory):
-    klass = _ColorMapTool
-    slicer = Instance(Slicer)
-    colorMapper = Instance(ColorMapper)
-    callback = Callable
-
-
-class ToolSet(HasTraits):
-    factories = List(GraphicsToolFactory)
-
-    def __init__(self, **traits):
-        super(ToolSet, self).__init__(**traits)
-        self._tools = []
-
-    @property
-    def tools(self):
-        return self._tools
-
-    def init_tools(self, graphics, mouse):
-        return [t.init_tool(graphics, mouse) for t in self.factories]
-
