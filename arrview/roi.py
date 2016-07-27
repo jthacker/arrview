@@ -1,60 +1,54 @@
-import skimage.draw
-import numpy as np
-import os, h5py
-from itertools import izip
 from collections import namedtuple, OrderedDict
+from itertools import izip
+import logging
+import os
+import time
+
+import numpy as np
 
 from traits.api import (HasTraits, HasPrivateTraits, List, Instance, Property,
     Any, Str, Int, Float, Button, DelegatesTo, WeakRef, Array, File,
-    on_trait_change, cached_property, TraitError)
-from traitsui.api import View, Item, HGroup, TabularEditor
-from traitsui.tabular_adapter import TabularAdapter
+    on_trait_change, cached_property, TraitError, Event, Color)
+
+from traitsui.api import View, Item, HGroup, TableEditor, ColorEditor
 from traitsui.menu import OKCancelButtons
-from traitsui.table_column import ObjectColumn
+from traitsui.table_column import ObjectColumn, NumericColumn
 
-from jtmri.roi import create_mask
+from arrview.color import color_generator
+from arrview.util import rep
+from arrview.slicer import Slicer, SliceTuple
+from arrview.ui.dimeditor import SlicerDims
 
-from .util import rep
-from .slicer import Slicer, SliceTuple
-from .ui.dimeditor import SlicerDims
 
-import numpy as np
+log = logging.getLogger(__name__)
 
-class ROI(HasTraits):
+
+class ROI(HasPrivateTraits):
     name = Str
-    slc = Instance(SliceTuple)
-    poly = Array
+    color = Color
+    mask = Array
+    updated = Event
 
-    def collapse(self, shape):
-        '''Collapse an ROI to len(shape) if the ROI is not drawn in the
-        dimensions that will be lost.
-        '''
-        ndim = len(shape)
-        if self.slc.xdim < ndim and self.slc.ydim < ndim:
-            self.slc = SliceTuple(self.slc[:ndim])
+    def set_mask(self, mask, slc):
+        mask_view = self.mask[slc.view_slice]
+        if slc.is_transposed:
+            mask = mask.T
+        self.mask[slc.view_slice] = mask
+        self.updated = True
 
     def mask_arr(self, arr):
-        return np.ma.array(data=arr, mask=np.logical_not(self.as_mask(arr.shape)))
-
-    def as_mask(self, shape):
-        return create_mask(shape, self.slc, self.poly)
+        return np.ma.array(arr, mask=~self.mask)
 
     def __repr__(self):
-        return rep(self, ['name', 'slc', 'poly'])
+        return rep(self, ['name', 'color'])
 
 
-def mask_arr(arr, rois):
-    '''AND all the roi masks together and mask the array'''
-    mask = reduce(np.logical_and, (r.as_mask(arr.shape) for r in rois))
-    return np.ma.array(data=arr, mask=mask)
-
-
-class ROIStats(HasTraits):
+class ROIView(HasTraits):
     roi = Instance(ROI)
     arr = Any
     name = DelegatesTo('roi')
-    slc = DelegatesTo('roi')
-    poly = DelegatesTo('roi')
+    color = DelegatesTo('roi')
+    index = Int()
 
     mean = Property
     _mean = Float
@@ -64,22 +58,19 @@ class ROIStats(HasTraits):
     _size = Int
 
     def __init__(self, **traits):
-        super(ROIStats, self).__init__(**traits)
-        self.on_trait_change(self.update_stats, ['slc', 'poly'])
+        super(ROIView, self).__init__(**traits)
         self.update_stats()
 
+    @on_trait_change('roi:updated')
     def update_stats(self):
-        shape = self.arr.shape
-        mask = create_mask(shape, self.slc, self.poly)
-        masked_data = self.arr[mask]
-        try:
-            self._mean = masked_data.mean()
-            self._std = masked_data.std()
-        except TraitError:
+        masked_data = self.arr[self.roi.mask]
+        self._size = masked_data.size
+        if len(masked_data) == 0:
             self._mean = float('nan')
             self._std = float('nan')
-        self._size = masked_data.size
-
+        else:
+            self._mean = masked_data.mean()
+            self._std = masked_data.std()
 
     def _get_mean(self):
         return self._mean
@@ -91,81 +82,114 @@ class ROIStats(HasTraits):
         return self._size
 
     def __repr__(self):
-        return rep(self, ['name','size','mean','std'])
+        return rep(self, ['name','size','mean','std', 'color'])
 
 
-class ROIStatsAdapter(TabularAdapter):
-    columns = [ ('Name', 'name'),
-                ('Slice', 'slc'),
-                ('Mean', 'mean'),
-                ('Std', 'std'),
-                ('Size', 'size')]
+class CustomColorColumn(ObjectColumn):
+    def _get_color(self, object):
+        color = getattr(object, self.name).toTuple()
+        rgb = tuple(int(x) for x in color[:3])
+        return rgb
 
-    slc_text = Property
+    def get_cell_color(self, object):
+        return self._get_color(object)
 
-    def _get_slc_text(self):
-        return '[%s]' % ','.join(str(x) for x in self.item.slc)
+    def set_value(self, object, row, value):
+        print("set_value", args, kwargs)
+        return super(CustomColorColumn, self).set_value(object, row, value)
+
+    def get_text_color(self, object):
+        return self._get_color(object)
+
+    def get_value(self, object):
+        return ""
 
 
-roi_editor = TabularEditor(
-        adapter = ROIStatsAdapter(),
-        operations = ['edit'],
-        multi_select = True,
-        auto_update = True,
-        selected = 'selectedStats')
+roi_editor = TableEditor(
+    sortable = False,
+    configurable = False,
+    auto_size = True,
+    show_toolbar = False,
+    selection_mode = 'rows',
+    selected = 'selection',
+    columns = [
+        NumericColumn(name='index', label='#', editable=False),
+        CustomColorColumn(name='color', label='', editable=False),
+        ObjectColumn(name='name', label='Name', editable=True),
+        NumericColumn(name='mean', label='Mean', editable=False, format='%0.2f'),
+        ObjectColumn(name='std', label='STD', editable=False, format='%0.2f'),
+        ObjectColumn(name='size', label='Size', editable=False)])
 
-    
+
 class ROIManager(HasTraits):
     slicer = Instance(Slicer)
     rois = List(ROI, [])
-    selected = List(ROI, [])
-    roistats = List(ROIStats, [])
-    selectedStats = List(ROIStats, [])
-    
-    nextID = Int(0)
+    roiviews = List(ROIView, [])
+    selection = List(ROIView, [])
+    next_id = Int(0)
     slicerDims = Instance(SlicerDims)
     freedim = DelegatesTo('slicerDims')
 
-    replicate = Button
-    copy = Button
+    new = Button
     delete = Button
-    
+
     view = View(
-        HGroup(
-            Item('delete',
-                enabled_when='len(selectedStats) > 0',
+            Item('roiviews',
+                editor=roi_editor,
                 show_label=False),
-            Item('copy',
-                enabled_when='len(selectedStats) > 0',
-                show_label=False),
-            Item('replicate',
-                enabled_when='len(selectedStats) > 0',
-                show_label=False)),
-        Item('roistats', 
-            editor=roi_editor,
-            style='readonly',
-            show_label=False))
+            HGroup(
+                Item('new', show_label=False),
+                Item('delete',
+                    enabled_when='len(selection) > 0',
+                    show_label=False)))
 
     def __init__(self, **traits):
         self._statsmap = OrderedDict()
+        self._color_gen = color_generator()
         super(ROIManager, self).__init__(**traits)
-
-    @on_trait_change('selectedStats[]')
-    def selected_stats_changed(self):
-        self.selected = [s.roi for s in self.selectedStats]
 
     @on_trait_change('rois[]')
     def rois_updated(self, obj, trait, old, new):
         for roi in old:
             del self._statsmap[roi]
-
         for roi in new:
-            self._statsmap[roi] = ROIStats(roi=roi, arr=self.slicer.arr)
+            self._statsmap[roi] = ROIView(roi=roi, arr=self.slicer.arr)
+        roiviews = self._statsmap.values()
+        for i, rv in enumerate(roiviews, start=1):
+            rv.index = i
+        self.roiviews = self._statsmap.values()
+        # reset next_id and color_gen if rois is empty
+        if len(self.rois) == 0:
+            self.next_id = 0
+            self._color_gen = color_generator()
 
-        self.roistats = self._statsmap.values()
+    def _next_roi_color(self):
+        return tuple(255 * ch for ch in self._color_gen.next())
 
-    def new(self, poly):
-        self.rois.append(self._new_roi(self.slicer.slc, poly))
+    def new_roi(self):
+        roi = ROI(name='roi_%02d' % self.next_id,
+                  color=self._next_roi_color(),
+                  mask=np.zeros(self.slicer.shape, dtype=bool))
+        self.rois.append(roi)
+        self.next_id += 1
+        self.selection = [self._statsmap[roi]]
+        return roi
+
+    def add_rois(self, rois):
+        """Add ROIs to ROIManager, increments next ROI ID and color"""
+        for roi in rois:
+            roi.color = self._next_roi_color()
+            self.rois.append(roi)
+            self.next_id += 1
+
+    def update_mask(self, roi, mask):
+        roi.set_mask(mask, self.slicer.slc)
+
+    def select_roi_by_index(self, index):
+        if 1 <= index <= len(self.roiviews):
+            self.selection = [self.roiviews[index - 1]]
+        else:
+            log.debug('index %s is invalid for current roi list', index)
 
     def by_name(self, name):
         return [roi for roi in self.rois if roi.name==name]
@@ -173,90 +197,15 @@ class ROIManager(HasTraits):
     def names(self):
         return set(roi.name for roi in self.rois)
 
-    def _new_roi(self, slc, poly, name=None):
-        roi = ROI(
-            name='roi_%02d' % self.nextID,
-            slicer=self.slicer,
-            slc=slc,
-            poly=poly)
-        self.nextID += 1
-        return roi
-
-    def update_roi(self, roi, slc, poly):
+    def update_roi(self, roi, mask):
         idx = self.rois.index(roi)
-        newROI = ROI(
-            name=roi.name,
-            slc=slc,
-            poly=poly)
+        newROI = ROI(name=roi.name, mask=mask)
         self.rois[idx] = newROI
 
+    def _new_fired(self):
+        self.new_roi()
+
     def _delete_fired(self):
-        self.rois = [i for i in self.rois if i not in self.selected]
-        self.selected = []
-
-    def _copy_fired(self):
-        '''Changes all dims in ROIs slice to match the free dims
-        in the current arrview slice'''
-        arrslc = self.slicer.slc
-        rois = []
-        for roi in self.selected:
-            slc = list(roi.slc)
-            for dim in arrslc.freedims:
-                slc[dim] = arrslc[dim]
-            rois.append(ROI(name=roi.name, slc=SliceTuple(slc),
-                poly=roi.poly.copy()))
-        self.rois.extend(rois)
-
-    def _replicate_fired(self):
-        '''Copy the currently selected ROIs to each place in the 
-        currently selected free dimension'''
-        rois = []
-        dim,dimVal = self.freedim.dim, self.freedim.val
-        dimMax = self.slicer.shape[dim]
-        indicies = set(range(dimMax))
-        for roi in self.selected:
-            slc = roi.slc
-            if dim in slc.freedims:
-                for i in indicies - set([slc[dim]]):
-                    slc = list(roi.slc)
-                    slc[dim] = i
-                    slc = SliceTuple(slc)
-                    rois.append(
-                        ROI(name=roi.name,
-                            slc=slc, poly=roi.poly.copy()))
-        self.rois.extend(rois)
-
-
-class ROIPersistence(object):
-    @staticmethod
-    def filter_viewdims(slc):
-        viewdims = slc.viewdims
-        return [0 if d in viewdims else v for d,v in enumerate(slc)] 
-
-    @staticmethod
-    def save(rois, filename):
-        with h5py.File(filename, 'w') as f:
-            root = f.create_group('rois')
-            for i,roi in enumerate(rois):
-                roigrp = root.create_group('%d' % i)
-                # h5py only support utf8 strings at the moment, need to coerce data to
-                # this representation
-                roigrp.attrs['name'] = roi.name
-                roigrp.attrs['viewdims'] = roi.slc.viewdims
-                roigrp.attrs['arrslc'] = ROIPersistence.filter_viewdims(roi.slc)
-                roigrp['poly'] = roi.poly
-
-    @staticmethod
-    def load(filename, shape=None):
-        rois = []
-        with h5py.File(filename, 'r') as f:
-            for roigrp in f['/rois'].itervalues():
-                viewdims = roigrp.attrs['viewdims']
-                arrslc = roigrp.attrs['arrslc']
-                roi = ROI(name=roigrp.attrs['name'],
-                        poly=roigrp['poly'].value,
-                        slc=SliceTuple.from_arrayslice(arrslc, viewdims))
-                if shape:
-                    roi.collapse(shape)
-                rois.append(roi)
-        return sorted(rois, key=lambda r: (r.slc, r.name))
+        selected_rois = set(rv.roi for rv in self.selection)
+        self.rois = [r for r in self.rois if r not in selected_rois]
+        self.selection = []

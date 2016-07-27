@@ -18,7 +18,7 @@ class SliceTuple(tuple):
     @property
     def ydim(self):
         return self._ydim
-   
+
     @property
     def viewdims(self):
         return (self.xdim, self.ydim)
@@ -27,13 +27,16 @@ class SliceTuple(tuple):
     def is_transposed(self):
         return self.ydim > self.xdim
 
+    @property
+    def view_slice(self):
+        """Returns a tuple that can be used to get the slice of the array"""
+        return [slice(None) if d in self.viewdims else x for d, x in enumerate(self)]
+
     def viewarray(self, arr):
         '''Transforms arr from Array coordinates to Screen coordinates
         using the transformation described by this object'''
         assert arr.ndim == len(self), 'dimensions of arr must equal the length of this object'
-        viewdims = self.viewdims
-        arrayslice = [slice(None) if d in viewdims else x for d,x in enumerate(self)]
-        a = arr[arrayslice]
+        a = arr[self.view_slice]
         return a.transpose() if self.is_transposed else a
 
     def screen_coords_to_array_coords(self, x, y):
@@ -121,7 +124,7 @@ class Slicer(HasTraits):
 
     def _get_ndim(self):
         return self.arr.ndim
-    
+
     def _get_shape(self):
         return self.arr.shape
 
@@ -133,7 +136,6 @@ class Slicer(HasTraits):
         View dims are swapped if xDim > yDim'''
         assert 0 <= xdim < self.ndim
         assert 0 <= ydim < self.ndim
-        
         slc = list(self.slc)
         slc[self.slc.xdim] = 0
         slc[self.slc.ydim] = 0
@@ -156,7 +158,6 @@ class Slicer(HasTraits):
         on which one it is closer to.
         '''
         assert 0 <= dim < self.ndim, 'Dim [%d] must be in [0,%d)' % (dim, self.ndim)
-
         xdim,ydim = self.slc.viewdims
         if dim != xdim and dim != ydim:
             dMax = self.shape[dim]

@@ -13,7 +13,7 @@ from ..slicer import Slicer
 class _DimEditor(Editor):
     @staticmethod
     def disp(name):
-        colorMap = { 
+        colorMap = {
             'x': 'red',
             'y': 'blue',
             'z': 'green' }
@@ -92,8 +92,8 @@ class SlicerDims(HasPrivateTraits):
 
     view = View(
             HGroup(
-                Item('_dimlist', editor=DimEditor(), 
-                    springy=False, show_label=False), 
+                Item('_dimlist', editor=DimEditor(),
+                    springy=False, show_label=False),
                 Item('freedim', style='custom', show_label=False)))
 
     def __init__(self, slicer):
@@ -105,13 +105,13 @@ class SlicerDims(HasPrivateTraits):
             dims[freedims[0]] = 'z'
         self.freedim = FreeDim()
         self._dimlist = dims
-    
+
     def _dimlist_to_map(self):
         return {d:i for i,d in enumerate(self._dimlist)}
 
     @on_trait_change('_dimlist[]')
     def dimlist_changed(self):
-        m = self._dimlist_to_map() 
+        m = self._dimlist_to_map()
         self.slicer.set_viewdims(m['x'], m['y'])
         if 'z' in m:
             zdim = m['z']
@@ -123,7 +123,7 @@ class SlicerDims(HasPrivateTraits):
     def freedim_changed(self):
         f = self.freedim
         self.slicer.set_freedim(f.dim, f.val)
-    
+
 
 ## Quick Test ##
 if __name__ == '__main__':

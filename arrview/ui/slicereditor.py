@@ -4,10 +4,17 @@ from PySide.QtGui import (QGraphicsView, QGraphicsPixmapItem,
 
 from traits.api import (Instance, HasTraits, Int, WeakRef,
         on_trait_change, List)
+from traitsui.key_bindings import KeyBindings
 from traitsui.qt4.editor import Editor
 from traitsui.qt4.basic_editor_factory import BasicEditorFactory
 
 from arrview.tools import ToolSet, MouseState, MouseButtons
+
+import logging
+
+
+log = logging.getLogger(__name__)
+
 
 class ArrayGraphicsView(QGraphicsView):
     '''ArrayGraphicsView is used for viewing a numpy array.
@@ -21,7 +28,10 @@ class ArrayGraphicsView(QGraphicsView):
     mousedoubleclicked = Signal(object)
     mousepressed = Signal(object)
     mousereleased = Signal(object)
-    
+    mouse_entered = Signal(object)
+    mouse_left = Signal(object)
+    key_pressed = Signal(object)
+
     def __init__(self):
         super(ArrayGraphicsView, self).__init__()
         self.setViewportUpdateMode(self.FullViewportUpdate)
@@ -37,7 +47,15 @@ class ArrayGraphicsView(QGraphicsView):
         sp = self.mapToScene(ev.pos())
         p = self.pixmapItem.mapFromScene(sp)
         return (p.x(), p.y())
-  
+
+    def enterEvent(self, ev):
+        super(ArrayGraphicsView, self).enterEvent(ev)
+        self.mouse_entered.emit(ev)
+
+    def leaveEvent(self, ev):
+        super(ArrayGraphicsView, self).leaveEvent(ev)
+        self.mouse_left.emit(ev)
+
     def mouseReleaseEvent(self, ev):
         super(ArrayGraphicsView, self).mouseReleaseEvent(ev)
         self.mousereleased.emit(ev)
@@ -58,14 +76,15 @@ class ArrayGraphicsView(QGraphicsView):
         self.mousewheeled.emit(ev)
 
     def keyPressEvent(self, ev):
-        pass
+        super(ArrayGraphicsView, self).keyPressEvent(ev)
+        self.key_pressed.emit(ev)
 
     def setPixmap(self, pixmap):
         '''Set the array to be viewed.
         Args:
         array (numpy array): the array to be viewed
 
-        This will remove the previous array but maintain the previous scaling 
+        This will remove the previous array but maintain the previous scaling
         as well as the panned position.
         '''
         self.pixmap = pixmap
@@ -87,11 +106,14 @@ class _PixmapEditor(Editor):
 
     def init(self, parent):
         self.control = ArrayGraphicsView()
+        self.control.mouse_entered.connect(self._mouse_entered)
+        self.control.mouse_left.connect(self._mouse_left)
         self.control.mousemoved.connect(self._mouse_moved)
         self.control.mousepressed.connect(self._mouse_pressed)
         self.control.mousewheeled.connect(self._mouse_wheel_moved)
         self.control.mousereleased.connect(self._mouse_released)
         self.control.mousedoubleclicked.connect(self._mouse_double_clicked)
+        self.control.key_pressed.connect(self._key_pressed)
         self.control.setPixmap(self.value)
         self.control.fitView()
         self.control.destroyed.connect(self._control_destroyed)
@@ -112,13 +134,29 @@ class _PixmapEditor(Editor):
         self.control.setPixmap(self.value)
 
     def _config_mouse(self, ev):
-        self.mouse.coords = self.control.mouseevent_to_item_coords(ev)
-        self.mouse.screenCoords = (ev.pos().x(), ev.pos().y())
-        buttons = MouseButtons(
-            left    = ev.buttons() & Qt.LeftButton,
-            middle  = ev.buttons() & Qt.MiddleButton,
-            right   = ev.buttons() & Qt.RightButton)
-        self.mouse.buttons = buttons
+        if hasattr(ev, 'pos'):
+            self.mouse.coords = self.control.mouseevent_to_item_coords(ev)
+            self.mouse.screenCoords = (ev.pos().x(), ev.pos().y())
+            buttons = MouseButtons(
+                left    = ev.buttons() & Qt.LeftButton,
+                middle  = ev.buttons() & Qt.MiddleButton,
+                right   = ev.buttons() & Qt.RightButton)
+            self.mouse.buttons = buttons
+
+    def _key_pressed(self, ev):
+        key_bindings = self.factory.key_bindings
+        if key_bindings:
+            processed = key_bindings.do(event.event, self.ui.handler, self.ui.info)
+        else:
+            processed = False
+
+    def _mouse_left(self, ev):
+        self._config_mouse(ev)
+        self.mouse.left = True
+
+    def _mouse_entered(self, ev):
+        self._config_mouse(ev)
+        self.mouse.entered = True
 
     def _mouse_moved(self, ev):
         self._config_mouse(ev)
@@ -145,3 +183,4 @@ class _PixmapEditor(Editor):
 class PixmapEditor(BasicEditorFactory):
     klass = _PixmapEditor
     toolSet = Instance(ToolSet)
+    key_bindings = Instance(KeyBindings)

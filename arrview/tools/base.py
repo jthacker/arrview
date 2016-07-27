@@ -13,7 +13,7 @@ class MouseButtons(object):
         self._middle = middle
         self._right = right
 
-    @property 
+    @property
     def left(self):
         return self._left and not(self._right or self._middle)
 
@@ -46,8 +46,10 @@ class MouseState(HasTraits):
     released = Event
     moved = Event
     doubleclicked = Event
+    entered = Event
+    left = Event
 
-    def __repr__(self): 
+    def __repr__(self):
         return rep(self, ['coords','screenCoords', 'delta', 'buttons'])
 
 
@@ -64,6 +66,8 @@ class GraphicsTool(HasTraits):
     def __init__(self, factory, graphics, mouse):
         super(GraphicsTool, self).__init__(mouse=mouse, factory=factory)
         self.graphics = weakref.proxy(graphics)
+        mouse.on_trait_event(self.mouse_entered, 'entered')
+        mouse.on_trait_event(self.mouse_left, 'left')
         mouse.on_trait_event(self.mouse_moved, 'moved')
         mouse.on_trait_event(self.mouse_pressed, 'pressed')
         mouse.on_trait_event(self.mouse_wheeled, 'wheeled')
@@ -90,6 +94,12 @@ class GraphicsTool(HasTraits):
         pass
 
     def mouse_double_clicked(self):
+        pass
+
+    def mouse_entered(self):
+        pass
+
+    def mouse_left(self):
         pass
 
 

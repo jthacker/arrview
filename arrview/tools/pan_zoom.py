@@ -1,3 +1,4 @@
+from PySide.QtCore import Qt
 from PySide.QtGui import QGraphicsView
 
 from traits.api import Enum
@@ -19,7 +20,7 @@ class _PanTool(GraphicsTool):
             self.origin = self.mouse.screenCoords
             self.prevCursor = self.graphics.cursor()
             self.graphics.setCursor(Qt.ClosedHandCursor)
-    
+
     def mouse_moved(self):
         if self.buttonTest(self.mouse) and self.origin:
             vBar = self.graphics.verticalScrollBar()

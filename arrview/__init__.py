@@ -1,7 +1,7 @@
 import os
 os.environ['ETS_TOOLKIT'] = 'qt4'
 
-from arrview.version import __version__
+from arrview._version import __version__
 from arrview.main import ArrayViewer
 from arrview.slicer import Slicer
 

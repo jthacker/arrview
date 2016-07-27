@@ -20,18 +20,18 @@ class _CursorInfoTool(GraphicsTool):
 
     @on_trait_change('slicer:view')
     def update(self):
-        x,y = self.mouse.coords
+        x, y = map(int, self.mouse.coords)
         slc = list(self.slicer.slc)
         xDim,yDim = self.slicer.slc.viewdims
-        slc[xDim], slc[yDim] = x,y
+        slc[xDim], slc[yDim] = x, y
         
         view = self.slicer.view
         shape = view.shape
-        xMax,yMax = shape[1],shape[0]
+        xMax, yMax = shape[1], shape[0]
 
         msg = '(%s) ' % ','.join(['%03d' % p for p in slc])
         if 0 <= x < xMax and 0 <= y < yMax:
-            msg += "%0.2f" % view[y,x]
+            msg += "%0.2f" % view[y, x]
         else:
             msg += "  "
         self.callback(msg)

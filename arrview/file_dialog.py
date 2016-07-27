@@ -1,6 +1,6 @@
 from traits.api import Any, Str, Button
 from traitsui.file_dialog import OpenFileDialog, FileExistsHandler
-from traitsui.api import (View, VGroup, HGroup, Item, 
+from traitsui.api import (View, VGroup, HGroup, Item,
         ImageEditor, spring, Handler)
 
 import os
