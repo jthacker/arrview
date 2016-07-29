@@ -1,5 +1,0 @@
-#!/usr/bin/env python
-if __name__ == '__main__':
-    import os
-    import arrview.dicom_viewer
-    arrview.dicom_viewer.main(os.path.abspath('.'))

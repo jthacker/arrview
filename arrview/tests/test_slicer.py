@@ -1,8 +1,11 @@
 import numpy as np
+
 from numpy.testing import assert_array_equal
-from ..slicer import Slicer,SliceTuple
 from traits.testing.unittest_tools import unittest
 from traits.testing.api import UnittestTools
+
+from arrview.slicer import Slicer, SliceTuple
+
 
 class TestSlicer(unittest.TestCase, UnittestTools):
     def setUp(self):

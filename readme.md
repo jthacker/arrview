@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/jthacker/arrview.svg?branch=master)](https://travis-ci.org/jthacker/arrview)
+
 # arrview: an N dimensional array viewer
 View 2D slices of numpy arrays with arbitrarily many dimensions and edit regions of interest.
 

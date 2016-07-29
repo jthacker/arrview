@@ -15,11 +15,12 @@ setup(name='arrview',
           'matplotlib',
           'numpy',
           'PySide',
+          'scipy', # required by skimage, but skimage doesn't install
           'traits',
           'traitsui',
           'scikit-image'
           ],
-     tests_require=[
+      tests_require=[
           'pytest'
           ],
       setup_requires=[
