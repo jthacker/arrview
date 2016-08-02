@@ -9,7 +9,7 @@ from PySide.QtGui import QGraphicsPolygonItem, QImage
 from PySide.QtGui import QColor, QGraphicsPixmapItem, QPixmap
 from PySide.QtCore import QPoint, QPointF, Qt
 
-from traits.api import Bool, Enum, HasTraits, Instance, Int, List, WeakRef, on_trait_change
+from traits.api import Bool, Enum, DelegatesTo, Dict, HasTraits, Instance, Int, List, WeakRef, on_trait_change
 
 from arrview import settings
 from arrview.colormapper import ArrayPixmap
@@ -71,8 +71,8 @@ def _ndarray_to_arraypixmap(array, color=(0, 255, 0, 128)):
     return ArrayPixmap(pixdata, QPixmap.fromImage(img))
 
 
-def _display_color(color, is_selected):
-    alpha = 0.7 if is_selected else 0.4
+def _display_color(color, selected):
+    alpha = 0.7 if selected else 0.4
     color = QColor(color)
     color.setAlpha(255 * alpha)  # Set alpha to half for display
     return color
@@ -80,7 +80,7 @@ def _display_color(color, is_selected):
 
 class ROIDisplayItem(HasTraits):
     roi = Instance(ROI)
-    is_selected = Bool
+    selected = Bool(False)
     slicer = Instance(Slicer)
     pixmap = Instance(QPixmap, default=None)
     pixmapitem = Instance(QGraphicsPixmapItem, default=None)
@@ -93,12 +93,6 @@ class ROIDisplayItem(HasTraits):
     def destroy(self):
         self._graphics.scene().removeItem(self.pixmapitem)
 
-    def _set_pixmap_from_roi(self, roi):
-        color = _display_color(roi.color, self.is_selected)
-        self.pixmap = _ndarray_to_arraypixmap(roi.mask[self.slicer.slc.view_slice], color.toTuple())
-        self.pixmapitem.setPixmap(self.pixmap)
-        self.pixmapitem.setZValue(_foreground_roi_z if self.is_selected else _background_roi_z)
-
     @on_trait_change('roi')
     def _roi_changed(self, obj, name, old, new):
         if old is not None:
@@ -110,141 +104,145 @@ class ROIDisplayItem(HasTraits):
             self._set_pixmap_from_roi(new)
             self._graphics.scene().addItem(self.pixmapitem)
 
-    @on_trait_change('roi:updated,slicer:slc,is_selected')
-    def _roi_updated(self, obj, name, old, new):
+    @on_trait_change('roi:updated,roi:visible,slicer:slc,selected')
+    def _roi_updated(self):
         self._set_pixmap_from_roi(self.roi)
+
+    def _set_pixmap_from_roi(self, roi):
+        if roi.visible:
+            color = _display_color(roi.color, self.selected)
+        else:
+            color = QColor(Qt.transparent)
+        self.pixmap = _ndarray_to_arraypixmap(roi.mask[self.slicer.slc.view_slice], color.toTuple())
+        self.pixmapitem.setPixmap(self.pixmap)
+        self.pixmapitem.setZValue(_foreground_roi_z if self.selected else _background_roi_z)
 
 
 class ROIEdit(HasTraits):
-    mouse = Instance(MouseState)
-    roi_manager = Instance(ROIManager)
-    roi_display_items = List(ROIDisplayItem)
+    roi_tool = WeakRef('_ROITool')
     color = Instance(QColor, default=QColor(Qt.black))
-    radius = Int(0)
-    erase = Bool(False)
 
-    def __init__(self, graphics, **traits):
+    def __init__(self, **traits):
         self._origin = None
-        self.graphics = graphics
-        self.paintbrush = PaintBrushItem(radius=self.radius, color=QColor(Qt.transparent))
+        super(ROIEdit, self).__init__(**traits)
+        self.paintbrush = PaintBrushItem(radius=self.roi_tool.roi_size)
         self.paintbrush.setZValue(_paintbrush_z)  # Make this item draw on top
         self.paintbrush.hide()
-        self.graphics.scene().addItem(self.paintbrush)
-        super(ROIEdit, self).__init__(**traits)
+        self.roi_tool.graphics.scene().addItem(self.paintbrush)
 
     def destroy(self):
-        self.graphics.scene().removeItem(self.paintbrush)
+        self.roi_tool.graphics.scene().removeItem(self.paintbrush)
+
+    @on_trait_change('roi_tool:roi_size')
+    def _roi_size_changed(self):
+        self.paintbrush.set_radius(self.roi_tool.roi_size)
 
     def _paint(self):
-        for roi_display_item in self.roi_display_items:
-            self.paintbrush.fill_pixmap(
-                    roi_display_item.pixmap,
-                    QPoint(*self._origin),
-                    QPoint(*self.mouse.coords))
-            roi_display_item.pixmapitem.setPixmap(roi_display_item.pixmap)
+        for rdi in self.roi_tool.roi_display_item_dict.itervalues():
+            if rdi.selected and rdi.roi.visible:
+                self.paintbrush.fill_pixmap(rdi.pixmap,
+                                            QPoint(*self._origin),
+                                            QPoint(*self.roi_tool.mouse.coords))
+                rdi.pixmapitem.setPixmap(rdi.pixmap)
 
-    @on_trait_change('roi_manager.selection[]')
+    @on_trait_change('roi_tool:roi_manager.selection[]')
     def _roi_manager_selection_changed(self):
-        if not self.erase and self.roi_manager.selection:
-            color = _display_color(self.roi_manager.selection[-1].roi.color, is_selected=True)
+        if not self.roi_tool.mode == 'erase' and len(self.roi_tool.roi_manager.selection) == 1:
+            color = _display_color(self.roi_tool.roi_manager.selection[0].roi.color, selected=True)
         else:
             color = QColor(Qt.transparent)
         self.paintbrush.set_color(color)
 
-    @on_trait_change('radius')
-    def _radius_changed(self):
-        self.paintbrush.set_radius(self.radius)
-
-    @on_trait_change('mouse:entered')
+    @on_trait_change('roi_tool:mouse:entered')
     def mouse_entered(self):
         self.paintbrush.show()
 
-    @on_trait_change('mouse:left')
+    @on_trait_change('roi_tool:mouse:left')
     def mouse_left(self):
         self.paintbrush.hide()
         self._origin = None
 
-    @on_trait_change('mouse:pressed')
+    @on_trait_change('roi_tool:mouse:pressed')
     def mouse_pressed(self):
-        if not (self.erase or self.roi_manager.selection):
-            self.roi_manager.new_roi()
-        self._origin = self.mouse.coords
+        if not self.roi_tool.mouse.buttons.left:
+            return
+        if not (self.roi_tool.mode == 'erase' or self.roi_tool.roi_manager.selection):
+            self.roi_tool.roi_manager.new_roi()
+        self._origin = self.roi_tool.mouse.coords
         self._paint()
 
-    @on_trait_change('mouse:moved')
+    @on_trait_change('roi_tool:mouse:moved')
     def mouse_moved(self):
-        coords = self.mouse.coords
+        coords = self.roi_tool.mouse.coords
         self.paintbrush.setPos(QPoint(*coords))
         if self._origin:
             self._paint()
             self._origin = coords
             return True
 
-    @on_trait_change('mouse:released')
+    @on_trait_change('roi_tool:mouse:released')
     def mouse_released(self):
         self._origin = None
-        for roi_display_item in self.roi_display_items:
-            mask = _pixmap_to_ndarray(roi_display_item.pixmap)
-            self.roi_manager.update_mask(roi_display_item.roi, mask)
+        for rdi in self.roi_tool.roi_display_item_dict.itervalues():
+            if rdi.selected and rdi.roi.visible:
+                mask = _pixmap_to_ndarray(rdi.pixmap)
+                self.roi_tool.roi_manager.update_mask(rdi.roi, mask)
 
 
 class _ROITool(GraphicsTool):
     name = 'ROI'
+    roi_size = Int(0)
+    mode = DelegatesTo('factory')
+    roi_display_item_dict = Dict(ROI, ROIDisplayItem)
     roi_manager = Instance(ROIManager)
 
     def init(self):
+        self.roi_editor = None
+        if self.mode in {'draw', 'erase'}:
+            self.roi_editor = ROIEdit(roi_tool=self)
         self.roi_manager = self.factory.roi_manager
-        self._roi_display_item_map = {}
-        self._update_roi_display_items(self.roi_manager.rois)
-        self.roiedit = None
-        if self.factory.mode in {'draw', 'erase'}:
-            self.roiedit = ROIEdit(graphics=self.graphics,
-                                   mouse=self.mouse,
-                                   roi_manager=self.roi_manager,
-                                   erase=self.factory.mode == 'erase',
-                                   radius=self.factory.factory.roi_size)
-            self._update_edit_views()
-
-    @on_trait_change('factory:factory:roi_size')
-    def _roi_size_changed(self, obj, name, old, new):
-        if self.roiedit:
-            self.roiedit.radius = new
+        self.roi_size = self.factory.factory.roi_size
 
     def destroy(self):
-        for roi_display_item in self._roi_display_item_map.values():
-            roi_display_item.destroy()
-        if self.roiedit:
-            self.roiedit.destroy()
+        for rdi in self.roi_display_item_dict.values():
+            rdi.destroy()
+        if self.roi_editor:
+            self.roi_editor.destroy()
+            self.roi_editor = None  # Remove reference to ROIEdit, ensures delete
 
-    def _update_roi_display_items(self, rois):
-        for roi in rois:
-            roi_display_item = ROIDisplayItem(self.graphics,
-                                              self.roi_manager.slicer,
-                                              roi=roi)
-            self._roi_display_item_map[roi] = roi_display_item
+    @on_trait_change('factory:factory.roi_size')
+    def _factory_roi_size_changed(self):
+        self.roi_size = self.factory.factory.roi_size
 
-    def _update_edit_views(self):
-        if self.roiedit:
-            self.roiedit.roi_display_items = [
-                    self._roi_display_item_map[rv.roi] for rv in self.roi_manager.selection]
+    @on_trait_change('roi_manager')
+    def _roi_manager_changed(self):
+        self._update_roi_display_item_dict(self.roi_manager.rois)
+        self._update_roi_selection(self.roi_manager.selection)
 
     @on_trait_change('roi_manager:selection[]')
     def _roi_selection_changed(self, obj, name, old, new):
-        self._update_edit_views()
         for rv in old:
-            rdt = self._roi_display_item_map.get(rv.roi)
-            if rdt:
-                rdt.is_selected = False
-        for rv in new:
-            self._roi_display_item_map[rv.roi].is_selected = True
+            rdi = self.roi_display_item_dict.get(rv.roi)
+            if rdi:
+                rdi.selected = False
+        self._update_roi_selection(new)
 
     @on_trait_change('roi_manager:rois[]')
     def _rois_changed(self, obj, name, old, new):
         for roi in old:
-            roi_display_item = self._roi_display_item_map[roi]
-            roi_display_item.destroy()
-            del self._roi_display_item_map[roi]
-        self._update_roi_display_items(new)
+            rdi = self.roi_display_item_dict.pop(roi)
+            rdi.destroy()
+        self._update_roi_display_item_dict(new)
+
+    def _update_roi_selection(self, roi_views):
+        for rv in roi_views:
+            self.roi_display_item_dict[rv.roi].selected = True
+
+    def _update_roi_display_item_dict(self, rois):
+        for roi in rois:
+            self.roi_display_item_dict[roi] = ROIDisplayItem(self.graphics,
+                                                             self.roi_manager.slicer,
+                                                             roi=roi)
 
 
 class ROITool(GraphicsToolFactory):

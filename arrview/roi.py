@@ -7,10 +7,11 @@ import time
 import numpy as np
 
 from traits.api import (HasTraits, HasPrivateTraits, List, Instance, Property,
-    Any, Str, Int, Float, Button, DelegatesTo, WeakRef, Array, File,
+    Any, Str, Int, Bool, Float, Button, DelegatesTo, WeakRef, Array, File,
     on_trait_change, cached_property, TraitError, Event, Color)
 
 from traitsui.api import View, Item, HGroup, TableEditor, ColorEditor
+from traitsui.extras.checkbox_column import CheckboxColumn
 from traitsui.menu import OKCancelButtons
 from traitsui.table_column import ObjectColumn, NumericColumn
 
@@ -26,6 +27,7 @@ log = logging.getLogger(__name__)
 class ROI(HasPrivateTraits):
     name = Str
     color = Color
+    visible = Bool(True)
     mask = Array
     updated = Event
 
@@ -48,6 +50,7 @@ class ROIView(HasTraits):
     arr = Any
     name = DelegatesTo('roi')
     color = DelegatesTo('roi')
+    visible = DelegatesTo('roi')
     index = Int()
 
     mean = Property
@@ -114,6 +117,7 @@ roi_editor = TableEditor(
     selected = 'selection',
     columns = [
         NumericColumn(name='index', label='#', editable=False),
+        CheckboxColumn(name='visible', label='', editable=True),
         CustomColorColumn(name='color', label='', editable=False),
         ObjectColumn(name='name', label='Name', editable=True),
         NumericColumn(name='mean', label='Mean', editable=False, format='%0.2f'),
@@ -196,11 +200,6 @@ class ROIManager(HasTraits):
 
     def names(self):
         return set(roi.name for roi in self.rois)
-
-    def update_roi(self, roi, mask):
-        idx = self.rois.index(roi)
-        newROI = ROI(name=roi.name, mask=mask)
-        self.rois[idx] = newROI
 
     def _new_fired(self):
         self.new_roi()

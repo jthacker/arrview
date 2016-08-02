@@ -88,7 +88,7 @@ class ArrayViewer(HasTraits):
             ZoomTool()]
 
         self._factoryMap = {
-            'pan': [PanTool(button='left'), ROITool(roi_manager=self.roi_manager)],
+            'pan': [PanTool(button='left'), ROITool(factory=self, roi_manager=self.roi_manager)],
             'draw': [ROITool(factory=self, roi_manager=self.roi_manager, mode='draw')],
             'erase': [ROITool(factory=self, roi_manager=self.roi_manager, mode='erase')]
             }
@@ -245,10 +245,17 @@ class ArrayViewerHandler(Handler):
         info.object.roi_manager.select_roi_by_index(idx)
 
 
+def view(arr, roi_filename=None, rois_updated=None, title=None):
+    viewer = ArrayViewer(Slicer(arr),
+                         roi_filename=roi_filename,
+                         title=title,
+                         rois_updated=rois_updated)
+    viewer.configure_traits()
+    return viewer
+
+
 def main():
     import numpy as np
-    from operator import mul
-    from . import view
 
     logging.getLogger().setLevel(logging.DEBUG)
     logging.basicConfig()

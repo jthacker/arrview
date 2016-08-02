@@ -1,5 +1,5 @@
 from PySide.QtCore import Qt, QRectF, QPoint, QPointF
-from PySide.QtGui import (QGraphicsItem, QGraphicsPixmapItem, QPixmap, QPainter)
+from PySide.QtGui import (QColor, QGraphicsItem, QGraphicsPixmapItem, QPixmap, QPainter)
 
 import logging
 import math
@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 class PaintBrushItem(QGraphicsItem):
     """PaintBrushItem is a QGraphicsItem that anchors to pixel locations."""
 
-    def __init__(self, radius=0, color=Qt.black):
+    def __init__(self, radius=0, color=QColor(Qt.transparent)):
         super(PaintBrushItem, self).__init__()
         self._color = color
         self._points = []
