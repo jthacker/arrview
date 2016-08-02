@@ -21,6 +21,10 @@ from arrview.tools.paintbrush import PaintBrushItem
 
 log = logging.getLogger(__name__)
 
+_paintbrush_z = 100
+_foreground_roi_z = 11
+_background_roi_z = 10
+
 
 def _pixmap_to_ndarray(pixmap, alpha_threshold=0):
     """Convert a pixmap to a ndarray mask
@@ -93,6 +97,7 @@ class ROIDisplayItem(HasTraits):
         color = _display_color(roi.color, self.is_selected)
         self.pixmap = _ndarray_to_arraypixmap(roi.mask[self.slicer.slc.view_slice], color.toTuple())
         self.pixmapitem.setPixmap(self.pixmap)
+        self.pixmapitem.setZValue(_foreground_roi_z if self.is_selected else _background_roi_z)
 
     @on_trait_change('roi')
     def _roi_changed(self, obj, name, old, new):
@@ -122,7 +127,7 @@ class ROIEdit(HasTraits):
         self._origin = None
         self.graphics = graphics
         self.paintbrush = PaintBrushItem(radius=self.radius, color=QColor(Qt.transparent))
-        self.paintbrush.setZValue(100)  # Make this item draw on top
+        self.paintbrush.setZValue(_paintbrush_z)  # Make this item draw on top
         self.paintbrush.hide()
         self.graphics.scene().addItem(self.paintbrush)
         super(ROIEdit, self).__init__(**traits)
