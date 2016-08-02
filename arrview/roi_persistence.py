@@ -118,7 +118,7 @@ def _convert_version0(roi_dict, shape):
         if _rois:
             roi = ROI(name=name, mask=np.zeros(shape, dtype=bool))
             for _roi in _rois:
-                mask = _create_mask(shape, _roi['slc'], _roi['poly'])
+                mask = _create_mask(shape, _roi['slc'], _roi['poly'], collapse=True)
                 roi.mask = np.logical_or(roi.mask, mask)
             rois.append((_rois[0]['slc'], roi.name, roi))
     return [r[2] for r in sorted(rois, key=lambda r: (r[0], r[1]))]
